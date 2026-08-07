@@ -11,8 +11,9 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@fuckclaw/config": "workspace:*",
     "@fuckclaw/core": "workspace:*",
-    "@fuckclaw/config": "workspace:*"
+    "ulidx": "^2.4.1"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

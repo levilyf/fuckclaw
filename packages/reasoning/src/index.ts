@@ -197,6 +197,7 @@ export class ReasoningEngine implements IReasoningEngineRunner {
         }
         this.logger.log({
           level: 'info',
+          module: 'reasoning',
           message: `Reasoning step ${currentStep}: executing tool "${parsed.toolName}"`,
           metadata: { args: parsed.toolArgs },
         });

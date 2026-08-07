@@ -2,6 +2,7 @@ import { IAgentKernel } from '@fuckclaw/kernel';
 import { LLMRouter } from '@fuckclaw/llm-router';
 import { IObservability } from '@fuckclaw/observability';
 import { IEventBus } from '@fuckclaw/event-bus';
+import { IPersistenceLayer } from '@fuckclaw/persistence';
 import {
   TaskPlan,
   PlanExecutionResult,
@@ -25,11 +26,12 @@ export class Planner {
     logger: IObservability,
     eventBus: IEventBus,
     llmRouter?: LLMRouter,
+    persistence?: IPersistenceLayer,
     options: PlannerOptions = {}
   ) {
     this.decomposer = new GoalDecomposer(logger, llmRouter);
     this.replanner = new DynamicReplanner(logger, llmRouter, options.replanPolicy);
-    this.executor = new PlanExecutor(kernel, logger, eventBus, this.replanner);
+    this.executor = new PlanExecutor(kernel, logger, eventBus, this.replanner, persistence);
   }
 
   /**

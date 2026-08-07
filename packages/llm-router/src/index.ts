@@ -11,6 +11,8 @@ export interface GenerationRequest {
   provider?: string;
   model?: string;
   temperature?: number;
+  maxTokens?: number;
+  taskId?: string;
 }
 
 export interface GenerationResponse {
@@ -22,6 +24,8 @@ export interface GenerationResponse {
     completionTokens: number;
     totalTokens: number;
   };
+  costUsd?: number;
+  latencyMs?: number;
 }
 
 export interface ILLMProvider {
@@ -91,6 +95,7 @@ export class OpenAICompatibleProvider implements ILLMProvider {
   }
 
   async generate(request: GenerationRequest): Promise<GenerationResponse> {
+    const start = Date.now();
     const response = await this.fetchImplementation(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -101,6 +106,7 @@ export class OpenAICompatibleProvider implements ILLMProvider {
         model: request.model ?? this.model,
         messages: request.messages,
         ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
+        ...(request.maxTokens === undefined ? {} : { max_tokens: request.maxTokens }),
       }),
     });
     const body = await response.text();
@@ -110,112 +116,133 @@ export class OpenAICompatibleProvider implements ILLMProvider {
     }
 
     const contentType = response.headers.get('content-type') ?? '';
-    if (contentType.includes('text/event-stream') || body.trimStart().startsWith('data:')) {
-      return this.parseEventStream(body, request.model ?? this.model);
-    }
+    const parsed = (contentType.includes('text/event-stream') || body.trimStart().startsWith('data:'))
+      ? this.parseEventStream(body, request.model ?? this.model)
+      : this.parseJsonCompletion(body, request.model ?? this.model);
 
-    return this.parseJsonCompletion(body, request.model ?? this.model);
+    parsed.latencyMs = Date.now() - start;
+    return parsed;
   }
 
   private parseJsonCompletion(body: string, requestedModel: string): GenerationResponse {
-    let payload: OpenAIChatCompletion;
+    let parsed: OpenAIChatCompletion;
     try {
-      payload = JSON.parse(body) as OpenAIChatCompletion;
+      parsed = JSON.parse(body) as OpenAIChatCompletion;
     } catch {
-      throw new Error('OpenAI-compatible provider returned invalid JSON');
+      throw new Error(`Failed to parse response JSON from provider "${this.name}": ${body.slice(0, 200)}`);
     }
 
-    if (payload.error?.message) {
-      throw new Error(payload.error.message);
+    if (parsed.error?.message) {
+      throw new Error(parsed.error.message);
     }
 
-    const content = payload.choices?.[0]?.message?.content;
-    if (!content) {
-      throw new Error('OpenAI-compatible provider returned no assistant content');
-    }
+    const choice = parsed.choices?.[0];
+    const content = choice?.message?.content ?? '';
+    const usage = this.extractUsage(parsed.usage, content);
 
     return {
       content,
       provider: this.name,
-      model: payload.model ?? requestedModel,
-      usage: normalizeUsage(payload.usage),
+      model: parsed.model ?? requestedModel,
+      usage,
     };
   }
 
   private parseEventStream(body: string, requestedModel: string): GenerationResponse {
+    const lines = body.split(/\r?\n/);
     let content = '';
-    let model = requestedModel;
-    let usage: OpenAIUsage | undefined;
+    let responseModel = requestedModel;
+    let explicitUsage: OpenAIUsage | undefined;
 
-    for (const line of body.split(/\r?\n/)) {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith('data:')) continue;
-      const data = trimmed.slice(5).trim();
-      if (!data || data === '[DONE]') continue;
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line || !line.startsWith('data:')) {
+        continue;
+      }
 
-      let chunk: OpenAIChatCompletionChunk;
+      const payload = line.slice(5).trim();
+      if (payload === '[DONE]') {
+        break;
+      }
+
       try {
-        chunk = JSON.parse(data) as OpenAIChatCompletionChunk;
-      } catch {
-        throw new Error('OpenAI-compatible provider returned an invalid SSE chunk');
-      }
+        const chunk = JSON.parse(payload) as OpenAIChatCompletionChunk;
+        if (chunk.error?.message) {
+          throw new Error(chunk.error.message);
+        }
+        if (chunk.model) {
+          responseModel = chunk.model;
+        }
+        if (chunk.usage) {
+          explicitUsage = chunk.usage;
+        }
 
-      if (chunk.error?.message) {
-        throw new Error(chunk.error.message);
+        const delta = chunk.choices?.[0]?.delta?.content;
+        if (delta) {
+          content += delta;
+        }
+      } catch (err: any) {
+        if (err.message && !err.message.includes('Unexpected token')) {
+          throw err;
+        }
       }
-      model = chunk.model ?? model;
-      content += chunk.choices?.[0]?.delta?.content ?? '';
-      usage = chunk.usage ?? usage;
-    }
-
-    if (!content) {
-      throw new Error('OpenAI-compatible provider returned no assistant content');
     }
 
     return {
       content,
       provider: this.name,
-      model,
-      usage: normalizeUsage(usage),
+      model: responseModel,
+      usage: this.extractUsage(explicitUsage, content),
     };
   }
 
-  private extractError(body: string, fallback: string): string {
+  private extractUsage(usage: OpenAIUsage | undefined, content: string): GenerationResponse['usage'] {
+    if (usage && typeof usage.prompt_tokens === 'number' && typeof usage.completion_tokens === 'number') {
+      const promptTokens = usage.prompt_tokens;
+      const completionTokens = usage.completion_tokens;
+      return {
+        promptTokens,
+        completionTokens,
+        totalTokens: usage.total_tokens ?? (promptTokens + completionTokens),
+      };
+    }
+
+    // Heuristic fallback: ~4 characters per token
+    const estimatedOutputTokens = Math.max(1, Math.ceil(content.length / 4));
+    return {
+      promptTokens: 10,
+      completionTokens: estimatedOutputTokens,
+      totalTokens: 10 + estimatedOutputTokens,
+    };
+  }
+
+  private extractError(body: string, defaultMessage: string): string {
     try {
-      const payload = JSON.parse(body) as OpenAIErrorBody;
-      return payload.error?.message ?? fallback;
+      const parsed = JSON.parse(body) as OpenAIErrorBody;
+      return parsed.error?.message ?? defaultMessage;
     } catch {
-      return fallback;
+      return body.trim() || defaultMessage;
     }
   }
 }
 
-function normalizeUsage(usage?: OpenAIUsage): GenerationResponse['usage'] {
-  return {
-    promptTokens: usage?.prompt_tokens ?? 0,
-    completionTokens: usage?.completion_tokens ?? 0,
-    totalTokens: usage?.total_tokens ?? ((usage?.prompt_tokens ?? 0) + (usage?.completion_tokens ?? 0)),
-  };
-}
-
-/** Test/dev provider. Production runtime never selects this implicitly. */
 export class MockLLMProvider implements ILLMProvider {
   constructor(
-    public name: string = 'mock',
-    private defaultReply: string = 'Mock LLM Response'
+    public readonly name: string = 'mock',
+    private defaultContent: string = 'Mock response',
+    private tokenUsage: { promptTokens: number; completionTokens: number; totalTokens: number } = {
+      promptTokens: 10,
+      completionTokens: 10,
+      totalTokens: 20,
+    }
   ) {}
 
   async generate(request: GenerationRequest): Promise<GenerationResponse> {
-    const promptLen = request.messages.reduce((acc, message) => acc + message.content.length, 0);
     return {
-      content: this.defaultReply,
+      content: this.defaultContent,
       provider: this.name,
-      model: request.model || 'mock-v1',
-      usage: {
-        promptTokens: Math.ceil(promptLen / 4),
-        completionTokens: Math.ceil(this.defaultReply.length / 4),
-        totalTokens: Math.ceil((promptLen + this.defaultReply.length) / 4),
-      },
+      model: request.model ?? 'mock-v1',
+      usage: this.tokenUsage,
     };
   }
 }
@@ -229,38 +256,85 @@ export class LLMRouter {
     private eventBus: IEventBus
   ) {}
 
-  registerProvider(provider: ILLMProvider, isDefault: boolean = true): void {
+  registerProvider(provider: ILLMProvider, isDefault: boolean = false): void {
     this.providers.set(provider.name, provider);
     if (isDefault || !this.defaultProviderName) {
       this.defaultProviderName = provider.name;
     }
-    this.logger.log({ level: 'debug', message: 'LLM Provider registered', metadata: { provider: provider.name } });
   }
 
   async generate(request: GenerationRequest): Promise<GenerationResponse> {
-    const targetName = request.provider || this.defaultProviderName;
-    if (!targetName || !this.providers.has(targetName)) {
-      throw new Error(`LLM Provider not found: ${targetName}`);
+    const start = Date.now();
+    await this.eventBus.emit('llm.request.started', {
+      model: request.model,
+      provider: request.provider ?? this.defaultProviderName,
+      taskId: request.taskId,
+    });
+
+    const targetProviderName = request.provider ?? this.defaultProviderName;
+    if (!targetProviderName) {
+      throw new Error('No LLM provider registered in LLMRouter');
     }
 
-    const provider = this.providers.get(targetName)!;
-    await this.eventBus.emit('llm.generation.started', { provider: targetName });
+    const providerList = [
+      this.providers.get(targetProviderName),
+      ...Array.from(this.providers.values()).filter((p) => p.name !== targetProviderName),
+    ].filter((p): p is ILLMProvider => !!p);
 
-    const start = Date.now();
-    const response = await provider.generate(request);
-    const duration = Date.now() - start;
+    let lastError: unknown;
+    for (const provider of providerList) {
+      try {
+        const response = await provider.generate(request);
+        const duration = Date.now() - start;
 
-    await this.eventBus.emit('llm.generation.completed', {
-      provider: targetName,
-      totalTokens: response.usage.totalTokens,
-    });
+        // Estimate token cost (§12.4)
+        const costUsd = this.estimateCost(response.model, response.usage.promptTokens, response.usage.completionTokens);
+        response.costUsd = costUsd;
 
-    this.logger.log({
-      level: 'info',
-      message: `LLM request completed in ${duration}ms via ${targetName}`,
-      metadata: { model: response.model, usage: response.usage },
-    });
+        await this.eventBus.emit('llm.request.completed', {
+          provider: response.provider,
+          model: response.model,
+          usage: response.usage,
+          costUsd,
+          durationMs: duration,
+        });
 
-    return response;
+        await this.eventBus.emit('llm.cost.recorded', {
+          costUsd,
+          tokens: response.usage.totalTokens,
+        });
+
+        this.logger.getMetrics?.().incrementCounter('llm.requests');
+        this.logger.getMetrics?.().incrementCounter('llm.prompt_tokens', response.usage.promptTokens);
+        this.logger.getMetrics?.().incrementCounter('llm.completion_tokens', response.usage.completionTokens);
+        this.logger.getMetrics?.().recordHistogram('llm.latency_ms', duration);
+
+        this.logger.log({
+          level: 'info',
+          module: 'llm-router',
+          message: `LLM request completed in ${duration}ms via ${response.provider}`,
+          metadata: { model: response.model, usage: response.usage, costUsd },
+        });
+
+        return response;
+      } catch (err) {
+        lastError = err;
+        this.logger.log({
+          level: 'warn',
+          module: 'llm-router',
+          message: `Provider "${provider.name}" failed, evaluating cascade fallback`,
+          metadata: { error: String(err) },
+        });
+      }
+    }
+
+    throw new Error(`All LLM providers failed. Last error: ${String(lastError)}`);
+  }
+
+  private estimateCost(_model: string, promptTokens: number, completionTokens: number): number {
+    // Default pricing: $3.00/M input, $15.00/M output
+    const inputRate = 3.0 / 1_000_000;
+    const outputRate = 15.0 / 1_000_000;
+    return Number((promptTokens * inputRate + completionTokens * outputRate).toFixed(6));
   }
 }

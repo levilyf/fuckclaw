@@ -56,7 +56,7 @@ export async function createFuckClawRuntime(
     llmRouter.registerProvider(customLLMProvider);
   } else {
     const llm = config.get().llm;
-    if (!llm) {
+    if (!llm || !llm.baseUrl || !llm.apiKey) {
       persistence.close();
       throw new Error(
         'OpenAI-compatible LLM configuration is required. Set FUCKCLAW_LLM_BASE_URL, FUCKCLAW_LLM_API_KEY, and FUCKCLAW_LLM_MODEL.'
@@ -83,8 +83,8 @@ export async function createFuckClawRuntime(
   const reasoningEngine = new ReasoningEngine(logger, eventBus, toolRuntime, llmRouter);
   kernel.setReasoningEngine(reasoningEngine);
 
-  const planner = new Planner(kernel, logger, eventBus, llmRouter);
-  const scheduler = new Scheduler(kernel, logger, eventBus, workspace);
+  const planner = new Planner(kernel, logger, eventBus, llmRouter, persistence);
+  const scheduler = new Scheduler(kernel, logger, eventBus, workspace, persistence);
 
   await kernel.boot();
   await scheduler.start();

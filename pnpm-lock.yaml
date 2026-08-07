@@ -106,6 +106,9 @@ importers:
       '@fuckclaw/core':
         specifier: workspace:*
         version: link:../core
+      smol-toml:
+        specifier: ^1.7.1
+        version: 1.7.1
       zod:
         specifier: ^3.22.4
         version: 3.25.76
@@ -249,6 +252,9 @@ importers:
       '@fuckclaw/core':
         specifier: workspace:*
         version: link:../core
+      ulidx:
+        specifier: ^2.4.1
+        version: 2.4.1
     devDependencies:
       typescript:
         specifier: ^5.4.0
@@ -1007,6 +1013,10 @@ packages:
   simple-get@4.0.1:
     resolution: {integrity: sha512-brv7p5WgH0jmQJr1ZDDfKDOSeWWg+OVypG99A/5vYGPqJ6pxiaHLy8nxtFjBA7oMa01ebA9gfh1uMCFqOuXxvA==}
 
+  smol-toml@1.7.1:
+    resolution: {integrity: sha512-PPlsspAZ4jbMBu5DMFhfUGDQLu/vrL4SyBROVS37x8ynnVmFIs1VPBz1Co8Xks3TvpIaZXmU85y4DrQ+UyVFoQ==}
+    engines: {node: '>= 18'}
+
   source-map-js@1.2.1:
     resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
     engines: {node: '>=0.10.0'}
@@ -1678,6 +1688,8 @@ snapshots:
       decompress-response: 6.0.0
       once: 1.4.0
       simple-concat: 1.0.1
+
+  smol-toml@1.7.1: {}
 
   source-map-js@1.2.1: {}
 

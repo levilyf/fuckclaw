@@ -1,6 +1,7 @@
 import { IAgentKernel, Task } from '@fuckclaw/kernel';
 import { IObservability } from '@fuckclaw/observability';
 import { IEventBus } from '@fuckclaw/event-bus';
+import { IPersistenceLayer } from '@fuckclaw/persistence';
 import {
   TaskPlan,
   PlanExecutionResult,
@@ -15,7 +16,8 @@ export class PlanExecutor {
     private kernel: IAgentKernel,
     private logger: IObservability,
     private eventBus: IEventBus,
-    private replanner: DynamicReplanner
+    private replanner: DynamicReplanner,
+    private persistence?: IPersistenceLayer
   ) {}
 
   /**
@@ -35,9 +37,12 @@ export class PlanExecutor {
 
     this.logger.log({
       level: 'info',
+      module: 'planner',
       message: `Beginning execution of TaskPlan ${currentPlan.id} (version ${currentPlan.version}) for goal: "${currentPlan.goal}"`,
       metadata: { planId: currentPlan.id, totalSteps: currentPlan.steps.length },
     });
+
+    this.persistPlanRecord(currentPlan);
 
     await this.eventBus.emit('plan.started', {
       planId: currentPlan.id,
@@ -228,6 +233,32 @@ export class PlanExecutor {
       stepOutputs,
       reflection,
     };
+  }
+
+  private persistPlanRecord(plan: TaskPlan, reflection?: PlanReflection) {
+    if (!this.persistence) return;
+    try {
+      this.persistence.execute(
+        `INSERT INTO plans (id, goal_id, goal_description, version, strategy, state, reflection_json, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           version = excluded.version,
+           state = excluded.state,
+           reflection_json = excluded.reflection_json,
+           updated_at = excluded.updated_at`,
+        [
+          plan.id,
+          plan.rootGoal.id,
+          plan.goal,
+          plan.version,
+          plan.strategy,
+          plan.steps.every((s) => s.state === 'completed') ? 'completed' : 'active',
+          reflection ? JSON.stringify(reflection) : null,
+          Date.now(),
+          Date.now(),
+        ]
+      );
+    } catch {}
   }
 
   private buildReflection(
