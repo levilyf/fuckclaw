@@ -16,7 +16,10 @@
     "@fuckclaw/config": "workspace:*",
     "@fuckclaw/observability": "workspace:*",
     "@fuckclaw/persistence": "workspace:*",
-    "@fuckclaw/event-bus": "workspace:*"
+    "@fuckclaw/event-bus": "workspace:*",
+    "@fuckclaw/workspace": "workspace:*",
+    "@fuckclaw/tool-runtime": "workspace:*",
+    "@fuckclaw/llm-router": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

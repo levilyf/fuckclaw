@@ -17,12 +17,21 @@ importers:
       '@fuckclaw/event-bus':
         specifier: workspace:*
         version: link:packages/event-bus
+      '@fuckclaw/llm-router':
+        specifier: workspace:*
+        version: link:packages/llm-router
       '@fuckclaw/observability':
         specifier: workspace:*
         version: link:packages/observability
       '@fuckclaw/persistence':
         specifier: workspace:*
         version: link:packages/persistence
+      '@fuckclaw/tool-runtime':
+        specifier: workspace:*
+        version: link:packages/tool-runtime
+      '@fuckclaw/workspace':
+        specifier: workspace:*
+        version: link:packages/workspace
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
@@ -84,6 +93,31 @@ importers:
         specifier: ^1.4.0
         version: 1.6.1(@types/node@20.19.43)
 
+  packages/llm-router:
+    dependencies:
+      '@fuckclaw/config':
+        specifier: workspace:*
+        version: link:../config
+      '@fuckclaw/core':
+        specifier: workspace:*
+        version: link:../core
+      '@fuckclaw/event-bus':
+        specifier: workspace:*
+        version: link:../event-bus
+      '@fuckclaw/observability':
+        specifier: workspace:*
+        version: link:../observability
+      zod:
+        specifier: ^3.22.4
+        version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.4.0
+        version: 1.6.1(@types/node@20.19.43)
+
   packages/observability:
     dependencies:
       '@fuckclaw/config':
@@ -118,6 +152,50 @@ importers:
       '@types/better-sqlite3':
         specifier: ^7.6.9
         version: 7.6.13
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.4.0
+        version: 1.6.1(@types/node@20.19.43)
+
+  packages/tool-runtime:
+    dependencies:
+      '@fuckclaw/core':
+        specifier: workspace:*
+        version: link:../core
+      '@fuckclaw/event-bus':
+        specifier: workspace:*
+        version: link:../event-bus
+      '@fuckclaw/observability':
+        specifier: workspace:*
+        version: link:../observability
+      '@fuckclaw/workspace':
+        specifier: workspace:*
+        version: link:../workspace
+      zod:
+        specifier: ^3.22.4
+        version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.4.0
+        version: 1.6.1(@types/node@20.19.43)
+
+  packages/workspace:
+    dependencies:
+      '@fuckclaw/config':
+        specifier: workspace:*
+        version: link:../config
+      '@fuckclaw/core':
+        specifier: workspace:*
+        version: link:../core
+      '@fuckclaw/observability':
+        specifier: workspace:*
+        version: link:../observability
+    devDependencies:
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
