@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@fuckclaw/cli':
+        specifier: workspace:*
+        version: link:packages/cli
       '@fuckclaw/config':
         specifier: workspace:*
         version: link:packages/config
@@ -17,6 +20,9 @@ importers:
       '@fuckclaw/event-bus':
         specifier: workspace:*
         version: link:packages/event-bus
+      '@fuckclaw/kernel':
+        specifier: workspace:*
+        version: link:packages/kernel
       '@fuckclaw/llm-router':
         specifier: workspace:*
         version: link:packages/llm-router
@@ -26,6 +32,9 @@ importers:
       '@fuckclaw/persistence':
         specifier: workspace:*
         version: link:packages/persistence
+      '@fuckclaw/reasoning':
+        specifier: workspace:*
+        version: link:packages/reasoning
       '@fuckclaw/tool-runtime':
         specifier: workspace:*
         version: link:packages/tool-runtime
@@ -36,6 +45,46 @@ importers:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.43
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.4.0
+        version: 1.6.1(@types/node@20.19.43)
+
+  packages/cli:
+    dependencies:
+      '@fuckclaw/config':
+        specifier: workspace:*
+        version: link:../config
+      '@fuckclaw/core':
+        specifier: workspace:*
+        version: link:../core
+      '@fuckclaw/event-bus':
+        specifier: workspace:*
+        version: link:../event-bus
+      '@fuckclaw/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@fuckclaw/llm-router':
+        specifier: workspace:*
+        version: link:../llm-router
+      '@fuckclaw/observability':
+        specifier: workspace:*
+        version: link:../observability
+      '@fuckclaw/persistence':
+        specifier: workspace:*
+        version: link:../persistence
+      '@fuckclaw/reasoning':
+        specifier: workspace:*
+        version: link:../reasoning
+      '@fuckclaw/tool-runtime':
+        specifier: workspace:*
+        version: link:../tool-runtime
+      '@fuckclaw/workspace':
+        specifier: workspace:*
+        version: link:../workspace
+    devDependencies:
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
@@ -84,6 +133,43 @@ importers:
         version: link:../persistence
       ulidx:
         specifier: ^2.0.0
+        version: 2.4.1
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.4.0
+        version: 1.6.1(@types/node@20.19.43)
+
+  packages/kernel:
+    dependencies:
+      '@fuckclaw/config':
+        specifier: workspace:*
+        version: link:../config
+      '@fuckclaw/core':
+        specifier: workspace:*
+        version: link:../core
+      '@fuckclaw/event-bus':
+        specifier: workspace:*
+        version: link:../event-bus
+      '@fuckclaw/llm-router':
+        specifier: workspace:*
+        version: link:../llm-router
+      '@fuckclaw/observability':
+        specifier: workspace:*
+        version: link:../observability
+      '@fuckclaw/persistence':
+        specifier: workspace:*
+        version: link:../persistence
+      '@fuckclaw/tool-runtime':
+        specifier: workspace:*
+        version: link:../tool-runtime
+      '@fuckclaw/workspace':
+        specifier: workspace:*
+        version: link:../workspace
+      ulidx:
+        specifier: ^2.3.0
         version: 2.4.1
     devDependencies:
       typescript:
@@ -152,6 +238,34 @@ importers:
       '@types/better-sqlite3':
         specifier: ^7.6.9
         version: 7.6.13
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.4.0
+        version: 1.6.1(@types/node@20.19.43)
+
+  packages/reasoning:
+    dependencies:
+      '@fuckclaw/core':
+        specifier: workspace:*
+        version: link:../core
+      '@fuckclaw/event-bus':
+        specifier: workspace:*
+        version: link:../event-bus
+      '@fuckclaw/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@fuckclaw/llm-router':
+        specifier: workspace:*
+        version: link:../llm-router
+      '@fuckclaw/observability':
+        specifier: workspace:*
+        version: link:../observability
+      '@fuckclaw/tool-runtime':
+        specifier: workspace:*
+        version: link:../tool-runtime
+    devDependencies:
       typescript:
         specifier: ^5.4.0
         version: 5.9.3

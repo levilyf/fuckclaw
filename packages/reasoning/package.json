@@ -1,0 +1,25 @@
+{
+  "name": "@fuckclaw/reasoning",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@fuckclaw/core": "workspace:*",
+    "@fuckclaw/observability": "workspace:*",
+    "@fuckclaw/event-bus": "workspace:*",
+    "@fuckclaw/tool-runtime": "workspace:*",
+    "@fuckclaw/llm-router": "workspace:*",
+    "@fuckclaw/kernel": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vitest": "^1.4.0"
+  }
+}

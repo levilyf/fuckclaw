@@ -1,15 +1,17 @@
 {
-  "name": "fuckclaw",
+  "name": "@fuckclaw/cli",
   "version": "1.0.0",
-  "description": "FuckClaw - Personal AI Operating System",
   "private": true,
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "fuckclaw": "./dist/bin.js"
+  },
   "scripts": {
-    "build": "pnpm -r run build",
-    "test": "pnpm -r run test",
-    "lint": "echo 'All packages clean'",
-    "clean": "pnpm -r run clean",
-    "boot": "node scripts/boot.js"
+    "build": "tsc",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
   },
   "dependencies": {
     "@fuckclaw/core": "workspace:*",
@@ -21,13 +23,10 @@
     "@fuckclaw/tool-runtime": "workspace:*",
     "@fuckclaw/llm-router": "workspace:*",
     "@fuckclaw/kernel": "workspace:*",
-    "@fuckclaw/reasoning": "workspace:*",
-    "@fuckclaw/cli": "workspace:*"
+    "@fuckclaw/reasoning": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
     "typescript": "^5.4.0",
     "vitest": "^1.4.0"
-  },
-  "packageManager": "pnpm@9.0.0"
+  }
 }
