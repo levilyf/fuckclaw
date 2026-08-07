@@ -100,15 +100,22 @@ export class ToolCallParser {
   }
 }
 
+export interface ReasoningEngineOptions {
+  maxSteps?: number;
+}
+
 export class ReasoningEngine implements IReasoningEngineRunner {
-  private readonly maxSteps: number = 10;
+  private readonly maxSteps: number;
 
   constructor(
     private logger: IObservability,
     private eventBus: IEventBus,
     private toolRuntime: ToolRuntime,
-    private llmRouter: LLMRouter
-  ) {}
+    private llmRouter: LLMRouter,
+    options: ReasoningEngineOptions = {}
+  ) {
+    this.maxSteps = options.maxSteps ?? 10;
+  }
 
   async runTask(
     task: Task,
@@ -116,11 +123,14 @@ export class ReasoningEngine implements IReasoningEngineRunner {
   ): Promise<{ output: string; steps: StepResult[] }> {
     const steps: StepResult[] = [];
     const conversation: ChatMessage[] = [
-      { role: 'system', content: context.systemPrompt },
+      { role: 'system', content: this.buildSystemPrompt(context) },
       ...context.history,
     ];
 
     let currentStep = 0;
+    let toolCalls = 0;
+    const startedAt = Date.now();
+    const requiresTool = this.taskRequiresTool(task.description);
 
     while (currentStep < this.maxSteps) {
       currentStep++;
@@ -136,14 +146,30 @@ export class ReasoningEngine implements IReasoningEngineRunner {
       });
 
       // 1. Prompt LLM
+      this.assertBudget(task, startedAt);
       const response = await this.llmRouter.generate({
         messages: conversation,
       });
+      task.budget.consumed.llmCalls++;
+      task.budget.consumed.tokens += response.usage.totalTokens;
+      task.budget.consumed.duration = Date.now() - startedAt;
 
       // 2. Parse LLM intent
       const parsed = ToolCallParser.parse(response.content);
 
       if (parsed.type === 'finish') {
+        if (requiresTool && toolCalls === 0) {
+          conversation.push({ role: 'assistant', content: response.content });
+          conversation.push({
+            role: 'user',
+            content: 'The task explicitly requires filesystem or shell execution. You have not invoked a tool yet. Respond with a valid Action and Action Input now.',
+          });
+          if (currentStep === this.maxSteps) {
+            throw new Error('Reasoning loop did not invoke a tool for a task that requires filesystem or shell execution');
+          }
+          continue;
+        }
+
         const stepRes: StepResult = {
           step: currentStep,
           thought: parsed.thought,
@@ -166,6 +192,9 @@ export class ReasoningEngine implements IReasoningEngineRunner {
       }
 
       if (parsed.type === 'tool' && parsed.toolName) {
+        if (task.budget.consumed.toolCalls >= task.budget.maxToolCalls) {
+          throw new Error('Task exceeded its tool call budget');
+        }
         this.logger.log({
           level: 'info',
           message: `Reasoning step ${currentStep}: executing tool "${parsed.toolName}"`,
@@ -177,6 +206,9 @@ export class ReasoningEngine implements IReasoningEngineRunner {
           parsed.toolName,
           parsed.toolArgs
         );
+        toolCalls++;
+        task.budget.consumed.toolCalls++;
+        task.budget.consumed.duration = Date.now() - startedAt;
 
         const stepRes: StepResult = {
           step: currentStep,
@@ -208,9 +240,51 @@ export class ReasoningEngine implements IReasoningEngineRunner {
     }
 
     // Step limit reached
+    if (requiresTool && toolCalls === 0) {
+      throw new Error('Reasoning loop did not invoke a tool for a task that requires filesystem or shell execution');
+    }
+
     return {
       output: `Reasoning loop concluded after maximum bounded steps (${this.maxSteps})`,
       steps,
     };
+  }
+
+  private buildSystemPrompt(context: ContextBundle): string {
+    return `${context.systemPrompt}
+
+Milestone 3 ReAct protocol:
+- Available tools: ${context.availableTools.join(', ')}.
+- To invoke a tool, respond exactly with:
+Thought: <brief reason>
+Action: <tool name>
+Action Input: <valid JSON object>
+- After an Observation, decide whether another tool is needed.
+- When the request is complete, respond exactly with:
+Thought: <brief completion reason>
+Final Answer: <result for the user>
+- For tasks that ask you to create, read, list, verify, or execute something, you must use an appropriate tool before Final Answer.
+- Use workspace-relative paths such as workspace/test.txt for filesystem actions.`;
+  }
+
+  private taskRequiresTool(description: string): boolean {
+    return /\b(create|write|read|list|verify|run|execute|delete|rename|copy|move)\b/i.test(description);
+  }
+
+  private assertBudget(task: Task, startedAt: number): void {
+    const consumed = task.budget.consumed;
+    consumed.duration = Date.now() - startedAt;
+    if (consumed.llmCalls >= task.budget.maxLLMCalls) {
+      throw new Error('Task exceeded its LLM call budget');
+    }
+    if (consumed.toolCalls >= task.budget.maxToolCalls) {
+      throw new Error('Task exceeded its tool call budget');
+    }
+    if (consumed.tokens >= task.budget.maxTokens) {
+      throw new Error('Task exceeded its token budget');
+    }
+    if (consumed.duration >= task.budget.maxDuration) {
+      throw new Error('Task exceeded its duration budget');
+    }
   }
 }

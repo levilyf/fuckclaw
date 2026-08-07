@@ -34,11 +34,20 @@ Final Answer: Task finished and workspace/cli-demo.txt created.`,
 }
 
 describe('CLI Runtime Integration', () => {
+  it('should require configured OpenAI-compatible credentials by default', async () => {
+    await expect(createFuckClawRuntime(
+      { workspace: { root: fs.mkdtempSync(path.join(os.tmpdir(), 'fuckclaw-cli-config-test-')) } },
+      undefined,
+      {}
+    )).rejects.toThrow('OpenAI-compatible LLM configuration is required');
+  });
+
   it('should run a complete task through Kernel, ReasoningEngine, and ToolRuntime', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fuckclaw-cli-test-'));
     const runtime = await createFuckClawRuntime(
       { workspace: { root: tempDir } },
-      new ReActFilesystemMockProvider()
+      new ReActFilesystemMockProvider(),
+      {}
     );
 
     try {

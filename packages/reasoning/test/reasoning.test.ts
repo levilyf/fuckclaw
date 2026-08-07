@@ -82,6 +82,34 @@ Final Answer: All operations succeeded`;
     expect(parsed.finalResponse).toBe('All operations succeeded');
   });
 
+  it('should reject a premature final answer for an explicit file task before tool use', async () => {
+    const loggerConfig = new ConfigManager({ workspace: { root: tempDir } });
+    const logger = new Logger(loggerConfig);
+    const db = new PersistenceLayer(':memory:', logger);
+    const bus = new EventBus(db, logger);
+    const toolRuntime = new ToolRuntime(logger, bus);
+    toolRuntime.register(new FilesystemTool(workspace));
+    const llmRouter = new LLMRouter(logger, bus);
+    llmRouter.registerProvider({
+      name: 'premature-finish',
+      async generate(_request: GenerationRequest): Promise<GenerationResponse> {
+        return {
+          content: 'Final Answer: done without acting',
+          provider: 'premature-finish',
+          model: 'mock',
+          usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        };
+      },
+    });
+    const engine = new ReasoningEngine(logger, bus, toolRuntime, llmRouter, { maxSteps: 2 });
+    const task = createTask('Create workspace/must-use-tool.txt with content Hello');
+
+    await expect(engine.runTask(task, createContext(task))).rejects.toThrow(
+      'Reasoning loop did not invoke a tool for a task that requires filesystem or shell execution'
+    );
+    db.close();
+  });
+
   it('should execute a bounded ReAct loop with tool call and observation', async () => {
     const mockTask: Task = {
       id: '01TESTTASK',
@@ -118,6 +146,10 @@ Final Answer: All operations succeeded`;
     expect(result.steps.length).toBe(2);
     expect(result.steps[0].action).toBe('filesystem');
     expect(result.steps[1].action).toBe('finish');
+    expect(mockTask.budget.consumed.llmCalls).toBe(2);
+    expect(mockTask.budget.consumed.toolCalls).toBe(1);
+    expect(mockTask.budget.consumed.tokens).toBe(40);
+    expect(mockTask.budget.consumed.duration).toBeGreaterThanOrEqual(0);
 
     // Verify filesystem state
     const createdFilePath = workspace.resolvePath('workspace', 'react-test.txt');
@@ -125,3 +157,36 @@ Final Answer: All operations succeeded`;
     expect(fs.readFileSync(createdFilePath, 'utf8')).toBe('ReAct loop worked');
   });
 });
+
+function createTask(description: string): Task {
+  return {
+    id: '01TESTTASK-PREMATURE',
+    description,
+    source: { type: 'user' },
+    priority: 50,
+    state: TaskState.EXECUTING,
+    childIds: [],
+    budget: {
+      maxTokens: 1000,
+      maxDuration: 1000,
+      maxToolCalls: 5,
+      maxLLMCalls: 5,
+      maxCost: 1,
+      consumed: { tokens: 0, duration: 0, toolCalls: 0, llmCalls: 0, cost: 0 },
+    },
+    results: [],
+    createdAt: Date.now(),
+    tags: [],
+    cancellation: new AbortController(),
+  };
+}
+
+function createContext(task: Task) {
+  return {
+    taskId: task.id,
+    description: task.description,
+    systemPrompt: 'Test system prompt',
+    history: [{ role: 'user' as const, content: task.description }],
+    availableTools: ['filesystem', 'shell'],
+  };
+}

@@ -31,7 +31,14 @@ Usage:
         console.log(`\nSteps Executed: ${task.results.length}`);
         task.results.forEach((s) => {
           console.log(`  [Step ${s.step}] Action: ${s.action} | Success: ${s.success}`);
+          if (s.observation !== undefined) {
+            console.log(`    Observation: ${String(s.observation)}`);
+          }
         });
+      }
+      if (task.state === 'failed') {
+        console.error(`Task error: ${task.error?.message ?? 'unknown failure'}`);
+        process.exitCode = 1;
       }
     } catch (err: any) {
       console.error(`\nTask Failed: ${err.message}`);

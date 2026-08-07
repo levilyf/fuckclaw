@@ -6,10 +6,12 @@
   "type": "module",
   "scripts": {
     "build": "pnpm -r run build",
-    "test": "pnpm -r run test",
-    "lint": "echo 'All packages clean'",
+    "test": "pnpm -r --workspace-concurrency=1 run test",
+    "lint": "pnpm run build",
     "clean": "pnpm -r run clean",
-    "boot": "node scripts/boot.js"
+    "boot": "node scripts/boot.js",
+    "fuckclaw": "node packages/cli/dist/bin.js",
+    "demo:m3": "node scripts/milestone3-demo.js"
   },
   "dependencies": {
     "@fuckclaw/core": "workspace:*",

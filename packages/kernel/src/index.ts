@@ -305,7 +305,7 @@ export class AgentKernel implements IAgentKernel {
       taskId: task.id,
       description: task.description,
       systemPrompt:
-        'You are FuckClaw, an autonomous AI operating system runtime. Solve the user request by reasoning and invoking appropriate tools.',
+        'You are FuckClaw, an autonomous AI operating system runtime. Solve the user request with the minimal bounded ReAct loop and invoke the available tools when the request requires an external action.',
       history: [{ role: 'user', content: task.description }],
       availableTools: ['shell', 'filesystem'],
     };
