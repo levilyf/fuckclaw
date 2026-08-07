@@ -62,6 +62,16 @@ describe('CLI Runtime Integration', () => {
       const filePath = path.join(tempDir, 'workspace', 'cli-demo.txt');
       expect(fs.existsSync(filePath)).toBe(true);
       expect(fs.readFileSync(filePath, 'utf8')).toBe('CLI slice verified');
+
+      // Verify KnowledgeGraph and SkillsEngine on runtime
+      expect(runtime.knowledgeGraph).toBeDefined();
+      expect(runtime.skillsEngine).toBeDefined();
+
+      const entity = await runtime.knowledgeGraph.createEntity({
+        type: 'project',
+        name: 'cli-test-project',
+      });
+      expect(entity.name).toBe('cli-test-project');
     } finally {
       await runtime.shutdown();
       fs.rmSync(tempDir, { recursive: true, force: true });

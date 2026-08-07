@@ -6,6 +6,8 @@ import { WorkspaceManager } from '@fuckclaw/workspace';
 import { ToolRuntime, ShellTool, FilesystemTool } from '@fuckclaw/tool-runtime';
 import { ILLMProvider, LLMRouter, OpenAICompatibleProvider } from '@fuckclaw/llm-router';
 import { MemorySystem } from '@fuckclaw/memory';
+import { KnowledgeGraph } from '@fuckclaw/knowledge-graph';
+import { SkillsEngine } from '@fuckclaw/skills';
 import { AgentKernel, Task } from '@fuckclaw/kernel';
 import { ReasoningEngine } from '@fuckclaw/reasoning';
 import { Planner } from '@fuckclaw/planner';
@@ -17,6 +19,8 @@ export interface FuckClawRuntimeInstance {
   kernel: AgentKernel;
   planner: Planner;
   scheduler: Scheduler;
+  knowledgeGraph: KnowledgeGraph;
+  skillsEngine: SkillsEngine;
   shutdown: () => Promise<void>;
 }
 
@@ -46,6 +50,7 @@ export async function createFuckClawRuntime(
   const eventBus = new EventBus(persistence, logger);
   const workspace = new WorkspaceManager(config, logger);
   const memorySystem = new MemorySystem(persistence, logger, eventBus);
+  const knowledgeGraph = new KnowledgeGraph(persistence, logger, eventBus);
 
   const toolRuntime = new ToolRuntime(logger, eventBus);
   toolRuntime.register(new ShellTool());
@@ -68,6 +73,9 @@ export async function createFuckClawRuntime(
       model: llm.model,
     }));
   }
+
+  const skillsEngine = new SkillsEngine(toolRuntime, llmRouter, logger, eventBus);
+  await skillsEngine.loadFromDirectory(workspace.getDirectory('skills'));
 
   const kernel = new AgentKernel(
     config,
@@ -93,6 +101,8 @@ export async function createFuckClawRuntime(
     kernel,
     planner,
     scheduler,
+    knowledgeGraph,
+    skillsEngine,
     shutdown: async () => {
       await scheduler.stop();
       await kernel.shutdown();

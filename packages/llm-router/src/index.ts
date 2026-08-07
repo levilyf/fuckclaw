@@ -247,7 +247,13 @@ export class MockLLMProvider implements ILLMProvider {
   }
 }
 
-export class LLMRouter {
+export interface ILLMRouter {
+  registerProvider(provider: ILLMProvider): void;
+  generate(request: GenerationRequest): Promise<GenerationResponse>;
+  estimateCost(model: string, promptTokens: number, completionTokens: number): number;
+}
+
+export class LLMRouter implements ILLMRouter {
   private providers: Map<string, ILLMProvider> = new Map();
   private defaultProviderName?: string;
 
@@ -331,7 +337,7 @@ export class LLMRouter {
     throw new Error(`All LLM providers failed. Last error: ${String(lastError)}`);
   }
 
-  private estimateCost(_model: string, promptTokens: number, completionTokens: number): number {
+  public estimateCost(_model: string, promptTokens: number, completionTokens: number): number {
     // Default pricing: $3.00/M input, $15.00/M output
     const inputRate = 3.0 / 1_000_000;
     const outputRate = 15.0 / 1_000_000;

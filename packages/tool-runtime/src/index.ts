@@ -207,7 +207,22 @@ export class FilesystemTool implements ITool {
   }
 }
 
-export class ToolRuntime {
+export interface ToolContext {
+  workingDirectory?: string;
+  abortSignal?: AbortSignal;
+  env?: Record<string, string>;
+  taskId?: string;
+}
+
+export interface IToolRuntime {
+  register(tool: ITool): void;
+  get(name: string): ITool | undefined;
+  list(): ITool[];
+  has(name: string): boolean;
+  execute(toolName: string, params: unknown, context?: ToolContext): Promise<ToolResult>;
+}
+
+export class ToolRuntime implements IToolRuntime {
   private tools: Map<string, ITool> = new Map();
 
   constructor(
@@ -229,8 +244,20 @@ export class ToolRuntime {
     return this.tools.get(name);
   }
 
+  get(name: string): ITool | undefined {
+    return this.tools.get(name);
+  }
+
   listTools(): ITool[] {
     return Array.from(this.tools.values());
+  }
+
+  list(): ITool[] {
+    return Array.from(this.tools.values());
+  }
+
+  has(name: string): boolean {
+    return this.tools.has(name);
   }
 
   async execute(toolName: string, params: unknown): Promise<ToolResult> {

@@ -1,5 +1,7 @@
 import Database from 'better-sqlite3';
 import { IObservability } from '@fuckclaw/observability';
+import fs from 'node:fs';
+import path from 'node:path';
 
 export interface Migration {
   version: number;
@@ -20,6 +22,12 @@ export class PersistenceLayer implements IPersistenceLayer {
   private db: Database.Database;
 
   constructor(dbPath: string = ':memory:', private logger?: IObservability) {
+    if (dbPath !== ':memory:') {
+      const parentDir = path.dirname(dbPath);
+      if (!fs.existsSync(parentDir)) {
+        fs.mkdirSync(parentDir, { recursive: true });
+      }
+    }
     this.db = new Database(dbPath, { timeout: 5000 });
     this.init();
   }
@@ -62,6 +70,25 @@ export class PersistenceLayer implements IPersistenceLayer {
               priority INTEGER NOT NULL DEFAULT 20,
               timestamp TEXT NOT NULL
             );
+          `);
+
+          // Safe column migration for pre-existing tables
+          const cols = db.prepare("PRAGMA table_info(events)").all() as Array<{ name: string }>;
+          const colNames = new Set(cols.map((c) => c.name));
+          if (!colNames.has('source')) {
+            db.exec("ALTER TABLE events ADD COLUMN source TEXT NOT NULL DEFAULT 'system'");
+          }
+          if (!colNames.has('correlation_id')) {
+            db.exec("ALTER TABLE events ADD COLUMN correlation_id TEXT");
+          }
+          if (!colNames.has('causation_id')) {
+            db.exec("ALTER TABLE events ADD COLUMN causation_id TEXT");
+          }
+          if (!colNames.has('priority')) {
+            db.exec("ALTER TABLE events ADD COLUMN priority INTEGER NOT NULL DEFAULT 20");
+          }
+
+          db.exec(`
             CREATE INDEX IF NOT EXISTS idx_events_type ON events(type, timestamp DESC);
             CREATE INDEX IF NOT EXISTS idx_events_correlation ON events(correlation_id);
             CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp DESC);
@@ -246,6 +273,75 @@ export class PersistenceLayer implements IPersistenceLayer {
             );
             CREATE INDEX IF NOT EXISTS idx_sched_hist ON schedule_history(schedule_id, fired_at DESC);
           `);
+        },
+      },
+
+      // Migration 5: Knowledge Graph Schema (§8)
+      {
+        version: 5,
+        name: 'create_knowledge_graph_schema',
+        up: (db) => {
+          db.exec(`
+            CREATE TABLE IF NOT EXISTS entities (
+              id TEXT PRIMARY KEY,
+              type TEXT NOT NULL,
+              name TEXT NOT NULL,
+              aliases_json TEXT NOT NULL DEFAULT '[]',
+              description TEXT NOT NULL DEFAULT '',
+              properties_json TEXT NOT NULL DEFAULT '{}',
+              source_memory_ids_json TEXT NOT NULL DEFAULT '[]',
+              confidence REAL NOT NULL DEFAULT 1.0,
+              embedding_json TEXT,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              last_referenced_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(type);
+            CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name);
+            CREATE INDEX IF NOT EXISTS idx_entities_updated ON entities(updated_at DESC);
+
+            CREATE TABLE IF NOT EXISTS relationships (
+              id TEXT PRIMARY KEY,
+              from_id TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+              to_id TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+              type TEXT NOT NULL,
+              weight REAL NOT NULL DEFAULT 1.0,
+              properties_json TEXT NOT NULL DEFAULT '{}',
+              valid_from INTEGER NOT NULL,
+              valid_until INTEGER,
+              source_memory_ids_json TEXT NOT NULL DEFAULT '[]',
+              confidence REAL NOT NULL DEFAULT 1.0,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_rel_from ON relationships(from_id, type);
+            CREATE INDEX IF NOT EXISTS idx_rel_to ON relationships(to_id, type);
+            CREATE INDEX IF NOT EXISTS idx_rel_type ON relationships(type);
+            CREATE INDEX IF NOT EXISTS idx_rel_valid ON relationships(valid_until);
+
+            CREATE TABLE IF NOT EXISTS entity_history (
+              id TEXT PRIMARY KEY,
+              entity_id TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+              changed_at INTEGER NOT NULL,
+              change_type TEXT NOT NULL,
+              previous_state_json TEXT,
+              change_description TEXT,
+              source_memory_id TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_entity_history ON entity_history(entity_id, changed_at DESC);
+          `);
+
+          try {
+            db.exec(`
+              CREATE VIRTUAL TABLE IF NOT EXISTS entities_fts USING fts5(
+                id UNINDEXED,
+                name,
+                description,
+                aliases_text,
+                tokenize = 'porter unicode61'
+              );
+            `);
+          } catch {}
         },
       },
     ];

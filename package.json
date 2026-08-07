@@ -14,17 +14,20 @@
     "demo:m3": "node scripts/milestone3-demo.js"
   },
   "dependencies": {
-    "@fuckclaw/core": "workspace:*",
+    "@fuckclaw/cli": "workspace:*",
     "@fuckclaw/config": "workspace:*",
+    "@fuckclaw/core": "workspace:*",
+    "@fuckclaw/event-bus": "workspace:*",
+    "@fuckclaw/kernel": "workspace:*",
+    "@fuckclaw/knowledge-graph": "workspace:*",
+    "@fuckclaw/llm-router": "workspace:*",
     "@fuckclaw/observability": "workspace:*",
     "@fuckclaw/persistence": "workspace:*",
-    "@fuckclaw/event-bus": "workspace:*",
-    "@fuckclaw/workspace": "workspace:*",
-    "@fuckclaw/tool-runtime": "workspace:*",
-    "@fuckclaw/llm-router": "workspace:*",
-    "@fuckclaw/kernel": "workspace:*",
     "@fuckclaw/reasoning": "workspace:*",
-    "@fuckclaw/cli": "workspace:*"
+    "@fuckclaw/skills": "workspace:*",
+    "@fuckclaw/tool-runtime": "workspace:*",
+    "@fuckclaw/workspace": "workspace:*",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

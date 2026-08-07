@@ -7,6 +7,7 @@ import os from 'node:os';
 export interface IWorkspaceManager {
   init(): Promise<void>;
   getRoot(): string;
+  getDirectory(category: string): string;
   resolvePath(category: string, ...subPaths: string[]): string;
   isInsideWorkspace(targetPath: string): boolean;
   assertSafePath(targetPath: string): string;
@@ -62,6 +63,10 @@ export class WorkspaceManager implements IWorkspaceManager {
 
   getRoot(): string {
     return this.root;
+  }
+
+  getDirectory(category: string): string {
+    return path.join(this.root, category);
   }
 
   resolvePath(category: string, ...subPaths: string[]): string {
