@@ -254,6 +254,10 @@ export class AgentKernel implements IAgentKernel {
             content: task.description,
             timestamp: Date.now(),
           });
+          // Capture user facts into semantic store if the input expresses facts/preferences
+          await this.memorySystem.extractAndAssertUserFacts(task.description, task.id).catch(e => {
+            this.logger.log({ level: 'warn', message: 'Failed to extract user facts', metadata: { error: e } });
+          });
         }
 
         const context = await this.buildContext(task);
@@ -339,7 +343,7 @@ export class AgentKernel implements IAgentKernel {
       description: task.description,
       systemPrompt,
       history: [{ role: 'user', content: task.description }],
-      availableTools: ['shell', 'filesystem', 'memory'],
+      availableTools: ['shell', 'filesystem'],
     };
   }
 }

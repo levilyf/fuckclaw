@@ -848,6 +848,7 @@ export interface IMemorySystem {
   searchHybrid(query: MemoryQuery): Promise<UnifiedMemorySearchResult>;
   retrieveForContext(query: string, tokenBudget: number): Promise<string>;
   flushWorkingToEpisodic(taskId?: string): Promise<string[]>;
+  extractAndAssertUserFacts(text: string, sourceEpisodeId?: string): Promise<string[]>;
 }
 
 export class MemorySystem implements IMemorySystem {
@@ -925,6 +926,70 @@ export class MemorySystem implements IMemorySystem {
 
   async retrieveForContext(query: string, tokenBudget: number): Promise<string> {
     return this.retriever.retrieveForContext(query, tokenBudget);
+  }
+
+  // ── Fact Ingestion / Extraction ──
+
+  async extractAndAssertUserFacts(text: string, sourceEpisodeId?: string): Promise<string[]> {
+    const trimmed = text.trim();
+    const assertedIds: string[] = [];
+
+    // Pattern 1: (please )?remember (that )?(my |the )?(.*)
+    const rememberMatch = trimmed.match(/(?:please\s+)?remember(?:\s+that)?(?:\s+(?:my|the))?\s+(.+)/i);
+    // Pattern 2: my (\w+(?:\s+\w+)?) is (.+)
+    const myIsMatch = trimmed.match(/^my\s+([a-zA-Z0-9_\s]+?)\s+is\s+([^.\n]+)/i);
+    // Pattern 3: I (hate|love|like|prefer)\s+([^.\n]+)
+    const preferenceMatch = trimmed.match(/^i\s+(hate|love|like|prefer)\s+([^.\n]+)/i);
+
+    let subject = 'user';
+    let predicate = 'stated';
+    let object = trimmed;
+    let statement = trimmed;
+    let matched = false;
+
+    if (rememberMatch && rememberMatch[1]) {
+      const factBody = rememberMatch[1].replace(/[.!?]+$/, '').trim();
+      statement = factBody.startsWith('name is') || factBody.startsWith('favorite')
+        ? `User ${factBody}`
+        : factBody;
+      subject = 'user';
+      predicate = 'declared';
+      object = factBody;
+      matched = true;
+    } else if (myIsMatch && myIsMatch[1] && myIsMatch[2]) {
+      const attr = myIsMatch[1].trim();
+      const val = myIsMatch[2].replace(/[.!?]+$/, '').trim();
+      subject = 'user';
+      predicate = attr;
+      object = val;
+      statement = `User ${attr} is ${val}`;
+      matched = true;
+    } else if (preferenceMatch && preferenceMatch[1] && preferenceMatch[2]) {
+      const verb = preferenceMatch[1].trim().toLowerCase();
+      const val = preferenceMatch[2].replace(/[.!?]+$/, '').trim();
+      subject = 'user';
+      predicate = 'preference';
+      object = `${verb}s ${val}`;
+      statement = `User ${verb}s ${val}`;
+      matched = true;
+    }
+
+    if (matched) {
+      const id = await this.assertFact({
+        subject,
+        predicate,
+        object,
+        statement,
+        confidence: 1.0,
+        sourceEpisodicIds: sourceEpisodeId ? [sourceEpisodeId] : [],
+        validFrom: Date.now(),
+        validUntil: null,
+        embedding: generateSimpleEmbedding(statement),
+      });
+      assertedIds.push(id);
+    }
+
+    return assertedIds;
   }
 
   // ── Working Memory → Episodic Flush (§6.4.1) ──

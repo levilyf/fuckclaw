@@ -253,8 +253,8 @@ export class ReasoningEngine implements IReasoningEngineRunner {
   private buildSystemPrompt(context: ContextBundle): string {
     return `${context.systemPrompt}
 
-Milestone 3+ ReAct protocol:
-- Available tools: ${context.availableTools.join(', ')}.
+ReAct Protocol:
+- Available external tools: ${context.availableTools.join(', ')}.
 - To invoke a tool, respond exactly with:
 Thought: <brief reason>
 Action: <tool name>
@@ -263,9 +263,8 @@ Action Input: <valid JSON object>
 - When the request is complete, respond exactly with:
 Thought: <brief completion reason>
 Final Answer: <result for the user>
-- For explicit file or shell tasks, use the appropriate tool before Final Answer.
-- To permanently store personal facts, preferences, or notes, use the "memory" tool (assert_fact).
-- If the required information is already available in the Recalled Knowledge section of the prompt, you may answer directly using Final Answer without invoking a tool.`;
+- For explicit file or shell tasks, use the appropriate external tool before Final Answer.
+- If the required information is already available in the Recalled Knowledge & Context section of the prompt or from general reasoning, answer directly using Final Answer without invoking any tools.`;
   }
 
   private taskRequiresTool(description: string): boolean {

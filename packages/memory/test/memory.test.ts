@@ -626,4 +626,23 @@ describe('MemorySystem', () => {
     expect(results.episodic[0]!.record.sessionId).toBe('session-1');
     expect(results.semantic[0]!.record.subject).toBe('deploy.sh');
   });
+
+  it('should automatically extract and assert user facts from natural language', async () => {
+    const memory = new MemorySystem(db, logger, eventBus, 'session-nl');
+
+    const ids1 = await memory.extractAndAssertUserFacts('Please remember my name is levi.');
+    expect(ids1.length).toBe(1);
+
+    const ids2 = await memory.extractAndAssertUserFacts('My favorite editor is Zed');
+    expect(ids2.length).toBe(1);
+
+    const ids3 = await memory.extractAndAssertUserFacts('I hate mushrooms');
+    expect(ids3.length).toBe(1);
+
+    const facts = await memory.querySemantic({ text: 'levi Zed mushrooms', limit: 10 });
+    expect(facts.length).toBe(3);
+    expect(facts.some((f) => f.record.statement.includes('levi'))).toBe(true);
+    expect(facts.some((f) => f.record.statement.includes('Zed'))).toBe(true);
+    expect(facts.some((f) => f.record.statement.includes('mushrooms'))).toBe(true);
+  });
 });

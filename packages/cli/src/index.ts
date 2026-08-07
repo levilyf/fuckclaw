@@ -3,7 +3,7 @@ import { Logger } from '@fuckclaw/observability';
 import { PersistenceLayer } from '@fuckclaw/persistence';
 import { EventBus } from '@fuckclaw/event-bus';
 import { WorkspaceManager } from '@fuckclaw/workspace';
-import { ToolRuntime, ShellTool, FilesystemTool, MemoryTool } from '@fuckclaw/tool-runtime';
+import { ToolRuntime, ShellTool, FilesystemTool } from '@fuckclaw/tool-runtime';
 import { ILLMProvider, LLMRouter, OpenAICompatibleProvider } from '@fuckclaw/llm-router';
 import { MemorySystem } from '@fuckclaw/memory';
 import { AgentKernel, Task } from '@fuckclaw/kernel';
@@ -46,7 +46,6 @@ export async function createFuckClawRuntime(
   const toolRuntime = new ToolRuntime(logger, eventBus);
   toolRuntime.register(new ShellTool());
   toolRuntime.register(new FilesystemTool(workspace));
-  toolRuntime.register(new MemoryTool(memorySystem));
 
   const llmRouter = new LLMRouter(logger, eventBus);
   if (customLLMProvider) {

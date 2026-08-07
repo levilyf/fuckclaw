@@ -13,7 +13,6 @@
   "dependencies": {
     "@fuckclaw/core": "workspace:*",
     "@fuckclaw/event-bus": "workspace:*",
-    "@fuckclaw/memory": "workspace:^",
     "@fuckclaw/observability": "workspace:*",
     "@fuckclaw/workspace": "workspace:*",
     "zod": "^3.22.4"
