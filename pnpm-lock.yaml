@@ -312,6 +312,9 @@ importers:
       '@fuckclaw/event-bus':
         specifier: workspace:*
         version: link:../event-bus
+      '@fuckclaw/memory':
+        specifier: workspace:^
+        version: link:../memory
       '@fuckclaw/observability':
         specifier: workspace:*
         version: link:../observability

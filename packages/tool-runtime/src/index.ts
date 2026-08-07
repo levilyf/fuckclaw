@@ -1,6 +1,7 @@
 import { IObservability } from '@fuckclaw/observability';
 import { IEventBus } from '@fuckclaw/event-bus';
 import { IWorkspaceManager } from '@fuckclaw/workspace';
+import { IMemorySystem, generateSimpleEmbedding } from '@fuckclaw/memory';
 import { z } from 'zod';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -89,6 +90,96 @@ export class FilesystemTool implements ITool {
         output: '',
         error: err.message || String(err),
         executionTimeMs: Date.now() - start
+      };
+    }
+  }
+}
+
+export class MemoryTool implements ITool {
+  name = 'memory';
+  description = 'Store, assert, or query persistent facts and experiences in the agent memory system';
+  schema = z.object({
+    action: z.enum(['assert_fact', 'retract_fact', 'query']),
+    statement: z.string().optional(),
+    subject: z.string().optional(),
+    predicate: z.string().optional(),
+    object: z.string().optional(),
+    factId: z.string().optional(),
+    reason: z.string().optional(),
+    query: z.string().optional(),
+  });
+
+  constructor(private memory: IMemorySystem) {}
+
+  async execute(params: unknown): Promise<ToolResult> {
+    const parsed = this.schema.parse(params) as {
+      action: 'assert_fact' | 'retract_fact' | 'query';
+      statement?: string;
+      subject?: string;
+      predicate?: string;
+      object?: string;
+      factId?: string;
+      reason?: string;
+      query?: string;
+    };
+    const start = Date.now();
+
+    try {
+      if (parsed.action === 'assert_fact') {
+        if (!parsed.statement) {
+          throw new Error('statement is required for assert_fact');
+        }
+        const subject = parsed.subject || 'user';
+        const predicate = parsed.predicate || 'stated';
+        const object = parsed.object || parsed.statement;
+
+        const id = await this.memory.assertFact({
+          subject,
+          predicate,
+          object,
+          statement: parsed.statement,
+          confidence: 1.0,
+          sourceEpisodicIds: [],
+          validFrom: Date.now(),
+          validUntil: null,
+          embedding: generateSimpleEmbedding(parsed.statement),
+        });
+
+        return {
+          success: true,
+          output: `Fact stored in semantic memory with ID: ${id}`,
+          executionTimeMs: Date.now() - start,
+        };
+      } else if (parsed.action === 'retract_fact') {
+        if (!parsed.factId) {
+          throw new Error('factId is required for retract_fact');
+        }
+        await this.memory.retractFact(parsed.factId, parsed.reason || 'User requested retraction');
+        return {
+          success: true,
+          output: `Fact ${parsed.factId} retracted successfully`,
+          executionTimeMs: Date.now() - start,
+        };
+      } else if (parsed.action === 'query') {
+        if (!parsed.query) {
+          throw new Error('query is required for query action');
+        }
+        const res = await this.memory.searchHybrid({ text: parsed.query, limit: 5 });
+        const facts = res.semantic.map((s) => `- ${s.record.statement}`).join('\n');
+        const episodes = res.episodic.map((e) => `- ${e.record.summary}`).join('\n');
+        return {
+          success: true,
+          output: `Facts:\n${facts || 'None'}\n\nEpisodes:\n${episodes || 'None'}`,
+          executionTimeMs: Date.now() - start,
+        };
+      }
+      throw new Error(`Unsupported memory action: ${parsed.action}`);
+    } catch (err: any) {
+      return {
+        success: false,
+        output: '',
+        error: err.message || String(err),
+        executionTimeMs: Date.now() - start,
       };
     }
   }

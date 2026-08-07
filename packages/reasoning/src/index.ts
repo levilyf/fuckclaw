@@ -253,7 +253,7 @@ export class ReasoningEngine implements IReasoningEngineRunner {
   private buildSystemPrompt(context: ContextBundle): string {
     return `${context.systemPrompt}
 
-Milestone 3 ReAct protocol:
+Milestone 3+ ReAct protocol:
 - Available tools: ${context.availableTools.join(', ')}.
 - To invoke a tool, respond exactly with:
 Thought: <brief reason>
@@ -263,12 +263,19 @@ Action Input: <valid JSON object>
 - When the request is complete, respond exactly with:
 Thought: <brief completion reason>
 Final Answer: <result for the user>
-- For tasks that ask you to create, read, list, verify, or execute something, you must use an appropriate tool before Final Answer.
-- Use workspace-relative paths such as workspace/test.txt for filesystem actions.`;
+- For explicit file or shell tasks, use the appropriate tool before Final Answer.
+- To permanently store personal facts, preferences, or notes, use the "memory" tool (assert_fact).
+- If the required information is already available in the Recalled Knowledge section of the prompt, you may answer directly using Final Answer without invoking a tool.`;
   }
 
   private taskRequiresTool(description: string): boolean {
-    return /\b(create|write|read|list|verify|run|execute|delete|rename|copy|move)\b/i.test(description);
+    const isExplicitFileOrExec =
+      /\b(create|write|read|list|delete|run|execute)\b/i.test(description) &&
+      /\b(file|workspace|directory|command|shell|script|\.txt|\.json|\.ts|\.js|\.md)\b/i.test(description);
+
+    const isMemoryIntent = /\b(remember|recall|my name|what is my|who am i|favorite)\b/i.test(description);
+
+    return isExplicitFileOrExec && !isMemoryIntent;
   }
 
   private assertBudget(task: Task, startedAt: number): void {

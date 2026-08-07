@@ -7,32 +7,59 @@ class DemoMockProvider {
   async generate(req) {
     const historyText = JSON.stringify(req.messages);
 
-    // If it is asking about previous session
-    if (historyText.includes('previous session') || historyText.includes('recalled')) {
-      const isRecalled = historyText.includes('DeepCosmos');
-      if (isRecalled) {
+    // If an observation just came in
+    if (historyText.includes('Observation:')) {
+      if (historyText.includes('remember my name is levi')) {
         return {
-          content: 'Thought: The recalled context contains the details from the previous session.\nFinal Answer: The codename was DeepCosmos and the filename was secret-project-alpha.txt.',
+          content: 'Thought: I have stored the fact in memory.\nFinal Answer: I will remember your name is levi.',
           usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 }
         };
-      } else {
+      }
+      if (historyText.includes('workspace/editor.txt')) {
         return {
-          content: 'Thought: I do not have memory of this.\nFinal Answer: I do not know.',
+          content: 'Thought: I have verified the file is written.\nFinal Answer: I wrote your favorite editor to workspace/editor.txt.',
           usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 }
         };
       }
     }
 
-    // Otherwise it is the action task (create file)
-    if (historyText.includes('Observation:')) {
+    const firstUserMessage = req.messages.find(m => m.role === 'user')?.content || '';
+
+    // DEMO A: Memory storage
+    if (firstUserMessage.includes('remember my name is levi')) {
       return {
-        content: 'Thought: I have verified the file is written.\nFinal Answer: File secret-project-alpha.txt created successfully.',
+        content: 'Thought: I need to use the memory tool to store this personal fact.\nAction: memory\nAction Input: {"action":"assert_fact","statement":"User name is levi"}',
         usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 }
       };
     }
 
+    // DEMO B: Explicit file task
+    if (firstUserMessage.includes('workspace/editor.txt')) {
+      return {
+        content: 'Thought: I need to write the file to the workspace.\nAction: filesystem\nAction Input: {"action":"write","path":"workspace/editor.txt","content":"favorite editor is Zed"}',
+        usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 }
+      };
+    }
+
+    // DEMO A: Memory recall
+    if (firstUserMessage.includes('What is my name')) {
+      // The kernel context retrieval will inject the fact into the system prompt!
+      const isRecalled = historyText.includes('User name is levi');
+      if (isRecalled) {
+        return {
+          content: 'Thought: The context states the user name is levi. I do not need a tool.\nFinal Answer: Your name is levi.',
+          usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 }
+        };
+      } else {
+        return {
+          content: 'Thought: I have no memory of this.\nFinal Answer: I do not know.',
+          usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 }
+        };
+      }
+    }
+
     return {
-      content: 'Thought: I need to write the file to the workspace.\nAction: filesystem\nAction Input: {"action":"write","path":"secret-project-alpha.txt","content":"Project Alpha codename: DeepCosmos"}',
+      content: 'Final Answer: Default response',
       usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 }
     };
   }
@@ -52,46 +79,59 @@ async function runMilestone4Demo() {
     logging: { level: 'info' }
   };
 
-  console.log('\n--- Session 1: Performing an Action and Recording to Persistent Memory ---');
+  console.log('\n--- DEMO A: Session 1 (Store Memory) ---');
   const runtime1 = await createFuckClawRuntime(customConfig, new DemoMockProvider());
 
   const task1 = await runtime1.kernel.submitTask({
-    description: 'Create a file named secret-project-alpha.txt in the workspace with content "Project Alpha codename: DeepCosmos", and confirm completion.'
+    description: 'Please remember my name is levi.'
   });
 
-  console.log(`Session 1 Task State: ${task1.state}`);
-  console.log(`Session 1 Error: ${JSON.stringify(task1.error)}`);
-  console.log(`Session 1 Output: ${task1.output}`);
-  console.log(`Session 1 Tool Calls: ${task1.results.filter(r => r.action === 'filesystem').length}`);
+  console.log(`Task State: ${task1.state}`);
+  console.log(`Output: ${task1.output}`);
+  console.log(`Memory Tool Calls: ${task1.results.filter(r => r.action === 'memory').length}`);
 
   // Clean shutdown of Session 1
-  console.log('Shutting down Session 1 runtime...');
   await runtime1.shutdown();
 
-  console.log('\n--- Session 2: Spawning Fresh Runtime & Querying Memory Across Sessions ---');
-  // Re-spawn runtime pointing to the same workspace & database
+  console.log('\n--- DEMO B: Session 2 (Explicit File Task) ---');
   const runtime2 = await createFuckClawRuntime(customConfig, new DemoMockProvider());
 
   const task2 = await runtime2.kernel.submitTask({
-    description: 'What was the secret project codename and filename created in the previous session?'
+    description: 'Please write my favorite editor Zed to workspace/editor.txt.'
   });
 
-  console.log(`Session 2 Task State: ${task2.state}`);
-  console.log(`Session 2 Output: ${task2.output}`);
-
-  console.log('Shutting down Session 2 runtime...');
+  console.log(`Task State: ${task2.state}`);
+  console.log(`Output: ${task2.output}`);
+  console.log(`Filesystem Tool Calls: ${task2.results.filter(r => r.action === 'filesystem').length}`);
+  
   await runtime2.shutdown();
 
-  // Validate the recall
-  const outputLower = (task2.output ?? '').toLowerCase();
-  const containsCodename = outputLower.includes('deepcosmos') || outputLower.includes('alpha');
-  const containsFile = outputLower.includes('secret-project-alpha.txt') || outputLower.includes('alpha');
+  console.log('\n--- DEMO A: Session 3 (Query Memory Across Sessions) ---');
+  const runtime3 = await createFuckClawRuntime(customConfig, new DemoMockProvider());
 
-  if (!containsCodename && !containsFile) {
-    throw new Error(`Demo failed: Session 2 did not recall the prior action. Output: ${task2.output}`);
+  const task3 = await runtime3.kernel.submitTask({
+    description: 'What is my name? Please answer without using the filesystem.'
+  });
+
+  console.log(`Task State: ${task3.state}`);
+  console.log(`Output: ${task3.output}`);
+  console.log(`Filesystem Tool Calls: ${task3.results.filter(r => r.action === 'filesystem').length}`);
+
+  await runtime3.shutdown();
+
+  // Validate the recall
+  const outputLower = (task3.output ?? '').toLowerCase();
+  const containsName = outputLower.includes('levi');
+
+  if (!containsName) {
+    throw new Error(`Demo failed: Session 3 did not recall the prior action from memory. Output: ${task3.output}`);
+  }
+  
+  if (task3.results.some(r => r.action === 'filesystem')) {
+    throw new Error(`Demo failed: Session 3 incorrectly used the filesystem for recall.`);
   }
 
-  console.log('\n=== Milestone 4 Persistent Recall Slice Verified Successfully ===');
+  console.log('\n=== Milestone 4 Persistent Recall Verified Successfully ===');
 }
 
 runMilestone4Demo().catch((error) => {

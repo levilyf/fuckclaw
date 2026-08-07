@@ -839,24 +839,14 @@ export class HybridRetriever {
 
 export interface IMemorySystem {
   readonly working: WorkingMemory;
-
-  // Episodic
   recordEpisode(input: EpisodicRecordInput): Promise<string>;
   getEpisode(id: string): Promise<EpisodicMemoryRecord | null>;
   queryEpisodic(query: MemoryQuery): Promise<ScoredMemoryRecord<EpisodicMemoryRecord>[]>;
-
-  // Semantic
   assertFact(input: SemanticFactInput): Promise<string>;
   retractFact(factId: string, reason: string): Promise<void>;
   querySemantic(query: MemoryQuery): Promise<ScoredMemoryRecord<SemanticMemoryRecord>[]>;
-
-  // Unified search
   searchHybrid(query: MemoryQuery): Promise<UnifiedMemorySearchResult>;
-
-  // Context retrieval
   retrieveForContext(query: string, tokenBudget: number): Promise<string>;
-
-  // Lifecycle
   flushWorkingToEpisodic(taskId?: string): Promise<string[]>;
 }
 

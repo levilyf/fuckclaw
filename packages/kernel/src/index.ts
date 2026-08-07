@@ -339,7 +339,7 @@ export class AgentKernel implements IAgentKernel {
       description: task.description,
       systemPrompt,
       history: [{ role: 'user', content: task.description }],
-      availableTools: ['shell', 'filesystem'],
+      availableTools: ['shell', 'filesystem', 'memory'],
     };
   }
 }
