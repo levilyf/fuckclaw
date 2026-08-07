@@ -1,0 +1,25 @@
+{
+  "name": "@fuckclaw/scheduler",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fuckclaw/core": "workspace:*",
+    "@fuckclaw/event-bus": "workspace:*",
+    "@fuckclaw/kernel": "workspace:*",
+    "@fuckclaw/observability": "workspace:*",
+    "@fuckclaw/workspace": "workspace:*",
+    "ulidx": "^2.3.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vitest": "^1.4.0"
+  }
+}

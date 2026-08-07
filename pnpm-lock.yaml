@@ -78,9 +78,15 @@ importers:
       '@fuckclaw/persistence':
         specifier: workspace:*
         version: link:../persistence
+      '@fuckclaw/planner':
+        specifier: workspace:*
+        version: link:../planner
       '@fuckclaw/reasoning':
         specifier: workspace:*
         version: link:../reasoning
+      '@fuckclaw/scheduler':
+        specifier: workspace:*
+        version: link:../scheduler
       '@fuckclaw/tool-runtime':
         specifier: workspace:*
         version: link:../tool-runtime
@@ -276,6 +282,34 @@ importers:
         specifier: ^1.4.0
         version: 1.6.1(@types/node@20.19.43)
 
+  packages/planner:
+    dependencies:
+      '@fuckclaw/core':
+        specifier: workspace:*
+        version: link:../core
+      '@fuckclaw/event-bus':
+        specifier: workspace:*
+        version: link:../event-bus
+      '@fuckclaw/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@fuckclaw/llm-router':
+        specifier: workspace:*
+        version: link:../llm-router
+      '@fuckclaw/observability':
+        specifier: workspace:*
+        version: link:../observability
+      ulidx:
+        specifier: ^2.3.1
+        version: 2.4.1
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.4.0
+        version: 1.6.1(@types/node@20.19.43)
+
   packages/reasoning:
     dependencies:
       '@fuckclaw/core':
@@ -304,6 +338,34 @@ importers:
         specifier: ^1.4.0
         version: 1.6.1(@types/node@20.19.43)
 
+  packages/scheduler:
+    dependencies:
+      '@fuckclaw/core':
+        specifier: workspace:*
+        version: link:../core
+      '@fuckclaw/event-bus':
+        specifier: workspace:*
+        version: link:../event-bus
+      '@fuckclaw/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@fuckclaw/observability':
+        specifier: workspace:*
+        version: link:../observability
+      '@fuckclaw/workspace':
+        specifier: workspace:*
+        version: link:../workspace
+      ulidx:
+        specifier: ^2.3.1
+        version: 2.4.1
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.4.0
+        version: 1.6.1(@types/node@20.19.43)
+
   packages/tool-runtime:
     dependencies:
       '@fuckclaw/core':
@@ -312,9 +374,6 @@ importers:
       '@fuckclaw/event-bus':
         specifier: workspace:*
         version: link:../event-bus
-      '@fuckclaw/memory':
-        specifier: workspace:^
-        version: link:../memory
       '@fuckclaw/observability':
         specifier: workspace:*
         version: link:../observability

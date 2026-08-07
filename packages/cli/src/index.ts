@@ -8,11 +8,15 @@ import { ILLMProvider, LLMRouter, OpenAICompatibleProvider } from '@fuckclaw/llm
 import { MemorySystem } from '@fuckclaw/memory';
 import { AgentKernel, Task } from '@fuckclaw/kernel';
 import { ReasoningEngine } from '@fuckclaw/reasoning';
+import { Planner } from '@fuckclaw/planner';
+import { Scheduler } from '@fuckclaw/scheduler';
 import path from 'node:path';
 import os from 'node:os';
 
 export interface FuckClawRuntimeInstance {
   kernel: AgentKernel;
+  planner: Planner;
+  scheduler: Scheduler;
   shutdown: () => Promise<void>;
 }
 
@@ -79,11 +83,18 @@ export async function createFuckClawRuntime(
   const reasoningEngine = new ReasoningEngine(logger, eventBus, toolRuntime, llmRouter);
   kernel.setReasoningEngine(reasoningEngine);
 
+  const planner = new Planner(kernel, logger, eventBus, llmRouter);
+  const scheduler = new Scheduler(kernel, logger, eventBus, workspace);
+
   await kernel.boot();
+  await scheduler.start();
 
   return {
     kernel,
+    planner,
+    scheduler,
     shutdown: async () => {
+      await scheduler.stop();
       await kernel.shutdown();
       persistence.close();
     },
