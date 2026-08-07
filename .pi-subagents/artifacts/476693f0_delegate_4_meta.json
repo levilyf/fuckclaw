@@ -1,0 +1,90 @@
+{
+  "runId": "476693f0",
+  "agent": "delegate",
+  "task": "Write the file /data/data/com.termux/files/home/fuckclaw/docs/architecture/10-skills.md for the FuckClaw architecture specification.\n\nThis is §10 — Skills. Write in RFC-grade depth with Mermaid diagrams, TypeScript interfaces, tables.\n\nSkills are higher-level capabilities composed from tools and reasoning. Cover:\n\n1. Purpose — difference between tools and skills. A tool is an atomic action; a skill is a learned procedure.\n2. Skill Definition — skill manifest, parameters, tool requirements, prompt templates\n3. Skill Composition — building complex skills from simpler skills and tools. Skill DAGs.\n4. Skill Chaining — sequential skill execution with data flow between skills\n5. Skill Versioning — version tracking, rollback, A/B testing of skill variants\n6. Skill Marketplace — discovery, sharing, installation of skills\n7. Automatic Skill Generation — extracting skills from successful task executions (§5 plan reflection). The system watches for repeated patterns and proposes skills.\n8. Skill Learning — improving skills over time based on success/failure rates, feedback\n9. Built-in Skills — examples:\n   - code_review (analyze code, check patterns, suggest improvements)\n   - research (web search, summarize, synthesize)\n   - debug (reproduce, diagnose, fix)\n   - deploy (build, test, deploy, verify)\n   - write_document (outline, draft, revise, finalize)\n10. Skill Execution — how the Reasoning Engine (§11) decides to invoke a skill vs raw tool use\n11. Skill Storage — filesystem layout in ~/.fuckclaw/skills/\n12. Interfaces, failure modes, extensibility, future improvements\n\nCross-reference: §5 Planner, §6 Memory (procedural), §9 Tool Runtime, §11 Reasoning Engine.\n\nTarget: ~400 lines.\n\n---\n**Output:**\nWrite your findings to exactly this path: /data/data/com.termux/files/home/fuckclaw/docs/architecture/10-skills.md\nThis path is authoritative for this run.\nIgnore any other output filename or output path mentioned elsewhere, including output destinations in the base agent prompt, system prompt, or task instructions.",
+  "exitCode": 1,
+  "usage": {
+    "input": 31702,
+    "output": 571,
+    "cacheRead": 4674,
+    "cacheWrite": 0,
+    "cost": 0,
+    "turns": 7
+  },
+  "model": "9router/ag/claude-opus-4-6-thinking",
+  "attemptedModels": [
+    "9router/ag/claude-opus-4-6-thinking"
+  ],
+  "modelAttempts": [
+    {
+      "model": "9router/ag/claude-opus-4-6-thinking",
+      "success": false,
+      "exitCode": 1,
+      "error": "429: {\"message\":\"[antigravity/claude-opus-4-6-thinking] [429]: {\\n  \\\"error\\\": {\\n    \\\"code\\\": 429,\\n    \\\"message\\\": \\\"Individual quota reached. Please upgrade your (reset after 2s)\"}",
+      "usage": {
+        "input": 31702,
+        "output": 571,
+        "cacheRead": 4674,
+        "cacheWrite": 0,
+        "cost": 0,
+        "turns": 7
+      }
+    }
+  ],
+  "durationMs": 95302,
+  "toolCount": 7,
+  "error": "429: {\"message\":\"[antigravity/claude-opus-4-6-thinking] [429]: {\\n  \\\"error\\\": {\\n    \\\"code\\\": 429,\\n    \\\"message\\\": \\\"Individual quota reached. Please upgrade your (reset after 2s)\"}",
+  "acceptance": {
+    "status": "rejected",
+    "explicit": false,
+    "effectiveAcceptance": {
+      "level": "attested",
+      "explicit": false,
+      "inferredReason": [
+        "read-only task wording"
+      ],
+      "criteria": [
+        {
+          "id": "criterion-1",
+          "must": "Return concrete findings with file paths and severity when applicable",
+          "evidence": [
+            "review-findings",
+            "residual-risks"
+          ],
+          "severity": "required"
+        }
+      ],
+      "evidence": [
+        "review-findings",
+        "residual-risks"
+      ],
+      "verify": [],
+      "stopRules": []
+    },
+    "inferredReason": [
+      "read-only task wording"
+    ],
+    "criteria": [
+      {
+        "id": "criterion-1",
+        "must": "Return concrete findings with file paths and severity when applicable",
+        "evidence": [
+          "review-findings",
+          "residual-risks"
+        ],
+        "severity": "required"
+      }
+    ],
+    "runtimeChecks": [
+      {
+        "id": "attestation",
+        "status": "failed",
+        "message": "Structured acceptance report not found."
+      }
+    ],
+    "verifyRuns": [],
+    "childReportParseError": "Structured acceptance report not found."
+  },
+  "transcriptPath": "/data/data/com.termux/files/home/fuckclaw/.pi-subagents/artifacts/476693f0_delegate_4_transcript.jsonl",
+  "timestamp": 1786082692012
+}

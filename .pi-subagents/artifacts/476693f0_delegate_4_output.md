@@ -1,0 +1,1 @@
+Now let me look at section 03 for high-level component structure and also look at the beginning of existing docs for conventions:

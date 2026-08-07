@@ -1,0 +1,130 @@
+{
+  "runId": "476693f0",
+  "agent": "delegate",
+  "task": "Write the file /data/data/com.termux/files/home/fuckclaw/docs/architecture/09-tool-runtime.md for the FuckClaw architecture specification.\n\nThis is §9 — Tool Runtime. Write in RFC-grade depth with Mermaid diagrams, TypeScript interfaces, tables.\n\nThe Tool Runtime is the agent's hands — how it interacts with the external world. Cover:\n\n1. Purpose — tools as the bridge between reasoning and action\n2. Tool Abstraction — unified ToolDefinition interface that works across native tools, MCP tools, REST APIs, CLI tools\n3. Tool Registry — dynamic registration, discovery, capability description. Registry data structures.\n4. Native Tools — built-in tools:\n   - Shell (command execution, streaming output, timeout, working directory)\n   - Filesystem (read, write, edit, search, watch, glob)\n   - Git (clone, commit, push, pull, diff, branch, log)\n   - Python (execute scripts, manage venvs, pip install)\n   - Browser (Playwright-based: navigate, screenshot, click, fill, extract)\n   - Docker (build, run, exec, compose, logs)\n   - Database (SQLite, Postgres query execution)\n   - HTTP (arbitrary HTTP requests)\n   - Search (web search via APIs)\n5. MCP Tool Integration — how MCP-discovered tools are registered and invoked (details in §17)\n6. Tool Execution Pipeline — validation → preparation → execution → result parsing → error handling\n7. Error Handling — error classification (transient, permanent, auth, timeout), retry policies per tool\n8. Streaming — real-time output streaming for long-running tools (shell, docker build)\n9. Timeouts — per-tool timeout configuration, global timeout, graceful kill\n10. Retries — exponential backoff, jitter, max retries, idempotency checks\n11. Tool Result Schema — structured tool results with stdout, stderr, exit code, artifacts\n12. Tool Security Context — tools run with operator's full permissions (no sandbox)\n13. Interfaces, failure modes, extensibility, performance, future improvements\n\nCross-reference: §4 Agent Kernel, §11 Reasoning Engine, §17 MCP, §14 Event Bus.\n\nTarget: ~500 lines.\n\n---\n**Output:**\nWrite your findings to exactly this path: /data/data/com.termux/files/home/fuckclaw/docs/architecture/09-tool-runtime.md\nThis path is authoritative for this run.\nIgnore any other output filename or output path mentioned elsewhere, including output destinations in the base agent prompt, system prompt, or task instructions.",
+  "exitCode": 143,
+  "usage": {
+    "input": 25514,
+    "output": 445,
+    "cacheRead": 4819,
+    "cacheWrite": 0,
+    "cost": 0,
+    "turns": 3
+  },
+  "model": "9router/ag/claude-opus-4-6-thinking",
+  "attemptedModels": [
+    "9router/ag/claude-opus-4-6-thinking"
+  ],
+  "modelAttempts": [
+    {
+      "model": "9router/ag/claude-opus-4-6-thinking",
+      "success": false,
+      "exitCode": 143,
+      "usage": {
+        "input": 25514,
+        "output": 445,
+        "cacheRead": 4819,
+        "cacheWrite": 0,
+        "cost": 0,
+        "turns": 3
+      }
+    }
+  ],
+  "durationMs": 118794,
+  "toolCount": 6,
+  "acceptance": {
+    "status": "rejected",
+    "explicit": false,
+    "effectiveAcceptance": {
+      "level": "reviewed",
+      "explicit": false,
+      "inferredReason": [
+        "risky write-capable run"
+      ],
+      "criteria": [
+        {
+          "id": "criterion-1",
+          "must": "Implement the requested change without widening scope",
+          "evidence": [
+            "changed-files",
+            "tests-added",
+            "commands-run",
+            "validation-output",
+            "residual-risks",
+            "no-staged-files"
+          ],
+          "severity": "required"
+        },
+        {
+          "id": "criterion-2",
+          "must": "Return evidence sufficient for an independent acceptance review",
+          "evidence": [
+            "changed-files",
+            "tests-added",
+            "commands-run",
+            "validation-output",
+            "residual-risks",
+            "no-staged-files"
+          ],
+          "severity": "required"
+        }
+      ],
+      "evidence": [
+        "changed-files",
+        "tests-added",
+        "commands-run",
+        "validation-output",
+        "residual-risks",
+        "no-staged-files"
+      ],
+      "verify": [],
+      "review": {
+        "agent": "reviewer",
+        "required": true
+      },
+      "stopRules": []
+    },
+    "inferredReason": [
+      "risky write-capable run"
+    ],
+    "criteria": [
+      {
+        "id": "criterion-1",
+        "must": "Implement the requested change without widening scope",
+        "evidence": [
+          "changed-files",
+          "tests-added",
+          "commands-run",
+          "validation-output",
+          "residual-risks",
+          "no-staged-files"
+        ],
+        "severity": "required"
+      },
+      {
+        "id": "criterion-2",
+        "must": "Return evidence sufficient for an independent acceptance review",
+        "evidence": [
+          "changed-files",
+          "tests-added",
+          "commands-run",
+          "validation-output",
+          "residual-risks",
+          "no-staged-files"
+        ],
+        "severity": "required"
+      }
+    ],
+    "runtimeChecks": [
+      {
+        "id": "attestation",
+        "status": "failed",
+        "message": "Structured acceptance report not found."
+      }
+    ],
+    "verifyRuns": [],
+    "childReportParseError": "Structured acceptance report not found."
+  },
+  "transcriptPath": "/data/data/com.termux/files/home/fuckclaw/.pi-subagents/artifacts/476693f0_delegate_3_transcript.jsonl",
+  "timestamp": 1786082715448
+}
