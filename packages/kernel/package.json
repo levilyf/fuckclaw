@@ -15,6 +15,7 @@
     "@fuckclaw/config": "workspace:*",
     "@fuckclaw/observability": "workspace:*",
     "@fuckclaw/persistence": "workspace:*",
+    "@fuckclaw/memory": "workspace:*",
     "@fuckclaw/event-bus": "workspace:*",
     "@fuckclaw/workspace": "workspace:*",
     "@fuckclaw/tool-runtime": "workspace:*",

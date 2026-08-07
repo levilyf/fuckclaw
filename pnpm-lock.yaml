@@ -69,6 +69,9 @@ importers:
       '@fuckclaw/llm-router':
         specifier: workspace:*
         version: link:../llm-router
+      '@fuckclaw/memory':
+        specifier: workspace:^
+        version: link:../memory
       '@fuckclaw/observability':
         specifier: workspace:*
         version: link:../observability
@@ -156,6 +159,9 @@ importers:
       '@fuckclaw/llm-router':
         specifier: workspace:*
         version: link:../llm-router
+      '@fuckclaw/memory':
+        specifier: workspace:*
+        version: link:../memory
       '@fuckclaw/observability':
         specifier: workspace:*
         version: link:../observability
@@ -196,6 +202,31 @@ importers:
       zod:
         specifier: ^3.22.4
         version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.4.0
+        version: 1.6.1(@types/node@20.19.43)
+
+  packages/memory:
+    dependencies:
+      '@fuckclaw/core':
+        specifier: workspace:*
+        version: link:../core
+      '@fuckclaw/event-bus':
+        specifier: workspace:*
+        version: link:../event-bus
+      '@fuckclaw/observability':
+        specifier: workspace:*
+        version: link:../observability
+      '@fuckclaw/persistence':
+        specifier: workspace:*
+        version: link:../persistence
+      ulidx:
+        specifier: ^2.4.1
+        version: 2.4.1
     devDependencies:
       typescript:
         specifier: ^5.4.0

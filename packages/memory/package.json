@@ -1,30 +1,21 @@
 {
-  "name": "@fuckclaw/cli",
+  "name": "@fuckclaw/memory",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "bin": {
-    "fuckclaw": "./dist/bin.js"
-  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@fuckclaw/config": "workspace:*",
     "@fuckclaw/core": "workspace:*",
     "@fuckclaw/event-bus": "workspace:*",
-    "@fuckclaw/kernel": "workspace:*",
-    "@fuckclaw/llm-router": "workspace:*",
-    "@fuckclaw/memory": "workspace:^",
     "@fuckclaw/observability": "workspace:*",
     "@fuckclaw/persistence": "workspace:*",
-    "@fuckclaw/reasoning": "workspace:*",
-    "@fuckclaw/tool-runtime": "workspace:*",
-    "@fuckclaw/workspace": "workspace:*"
+    "ulidx": "^2.4.1"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

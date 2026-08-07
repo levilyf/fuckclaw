@@ -5,6 +5,7 @@ import { IEventBus } from '@fuckclaw/event-bus';
 import { IWorkspaceManager } from '@fuckclaw/workspace';
 import { ToolRuntime } from '@fuckclaw/tool-runtime';
 import { LLMRouter } from '@fuckclaw/llm-router';
+import { IMemorySystem } from '@fuckclaw/memory';
 import { ulid } from 'ulidx';
 
 export enum KernelState {
@@ -140,7 +141,8 @@ export class AgentKernel implements IAgentKernel {
     public readonly eventBus: IEventBus,
     public readonly workspace: IWorkspaceManager,
     public readonly toolRuntime: ToolRuntime,
-    public readonly llmRouter: LLMRouter
+    public readonly llmRouter: LLMRouter,
+    public readonly memorySystem?: IMemorySystem
   ) {}
 
   setReasoningEngine(engine: IReasoningEngineRunner): void {
@@ -246,6 +248,14 @@ export class AgentKernel implements IAgentKernel {
       await this.eventBus.emit('task.started', { taskId: task.id });
 
       try {
+        if (this.memorySystem) {
+          this.memorySystem.working.appendTurn({
+            role: 'user',
+            content: task.description,
+            timestamp: Date.now(),
+          });
+        }
+
         const context = await this.buildContext(task);
         if (!this.reasoningEngine) {
           throw new Error('ReasoningEngine runner not attached to Kernel');
@@ -256,6 +266,14 @@ export class AgentKernel implements IAgentKernel {
         task.output = runResult.output;
         task.state = TaskState.COMPLETED;
         task.completedAt = Date.now();
+
+        if (this.memorySystem) {
+          this.memorySystem.working.appendTurn({
+            role: 'assistant',
+            content: task.output,
+            timestamp: Date.now(),
+          });
+        }
 
         await this.eventBus.emit('task.completed', { taskId: task.id, output: task.output });
       } catch (err: any) {
@@ -268,6 +286,11 @@ export class AgentKernel implements IAgentKernel {
         task.completedAt = Date.now();
         await this.eventBus.emit('task.failed', { taskId: task.id, error: task.error });
       } finally {
+        if (this.memorySystem) {
+          await this.memorySystem.flushWorkingToEpisodic(task.id).catch(e => {
+            this.logger.log({ level: 'error', message: 'Failed to flush memory', metadata: { error: e } });
+          });
+        }
         this.activeTaskIds.delete(nextTaskId);
       }
     }
@@ -301,11 +324,20 @@ export class AgentKernel implements IAgentKernel {
   }
 
   async buildContext(task: Task): Promise<ContextBundle> {
+    let systemPrompt =
+      'You are FuckClaw, an autonomous AI operating system runtime. Solve the user request with the minimal bounded ReAct loop and invoke the available tools when the request requires an external action.';
+
+    if (this.memorySystem) {
+      const memoryContext = await this.memorySystem.retrieveForContext(task.description, 1000);
+      if (memoryContext.trim().length > 0) {
+        systemPrompt += `\n\n# Recalled Knowledge & Context\n${memoryContext}`;
+      }
+    }
+
     return {
       taskId: task.id,
       description: task.description,
-      systemPrompt:
-        'You are FuckClaw, an autonomous AI operating system runtime. Solve the user request with the minimal bounded ReAct loop and invoke the available tools when the request requires an external action.',
+      systemPrompt,
       history: [{ role: 'user', content: task.description }],
       availableTools: ['shell', 'filesystem'],
     };

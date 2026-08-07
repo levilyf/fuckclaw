@@ -5,8 +5,11 @@ import { EventBus } from '@fuckclaw/event-bus';
 import { WorkspaceManager } from '@fuckclaw/workspace';
 import { ToolRuntime, ShellTool, FilesystemTool } from '@fuckclaw/tool-runtime';
 import { ILLMProvider, LLMRouter, OpenAICompatibleProvider } from '@fuckclaw/llm-router';
+import { MemorySystem } from '@fuckclaw/memory';
 import { AgentKernel, Task } from '@fuckclaw/kernel';
 import { ReasoningEngine } from '@fuckclaw/reasoning';
+import path from 'node:path';
+import os from 'node:os';
 
 export interface FuckClawRuntimeInstance {
   kernel: AgentKernel;
@@ -19,6 +22,12 @@ export async function createFuckClawRuntime(
   environment: NodeJS.ProcessEnv = process.env
 ): Promise<FuckClawRuntimeInstance> {
   const environmentConfig = ConfigManager.fromEnvironment(environment).get();
+  const rawRoot = customConfig.workspace?.root ?? environmentConfig.workspace?.root ?? '~/.fuckclaw';
+  const resolvedRoot = rawRoot.startsWith('~/')
+    ? path.join(os.homedir(), rawRoot.slice(2))
+    : path.resolve(rawRoot);
+  const persistencePath = rawRoot === ':memory:' ? ':memory:' : path.join(resolvedRoot, 'fuckclaw.db');
+
   const config = new ConfigManager({
     workspace: customConfig.workspace ?? environmentConfig.workspace,
     logging: customConfig.logging ?? environmentConfig.logging,
@@ -29,9 +38,10 @@ export async function createFuckClawRuntime(
         : {}),
   });
   const logger = new Logger(config);
-  const persistence = new PersistenceLayer(':memory:', logger);
+  const persistence = new PersistenceLayer(persistencePath, logger);
   const eventBus = new EventBus(persistence, logger);
   const workspace = new WorkspaceManager(config, logger);
+  const memorySystem = new MemorySystem(persistence, logger, eventBus);
 
   const toolRuntime = new ToolRuntime(logger, eventBus);
   toolRuntime.register(new ShellTool());
@@ -62,7 +72,8 @@ export async function createFuckClawRuntime(
     eventBus,
     workspace,
     toolRuntime,
-    llmRouter
+    llmRouter,
+    memorySystem
   );
 
   const reasoningEngine = new ReasoningEngine(logger, eventBus, toolRuntime, llmRouter);
