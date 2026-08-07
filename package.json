@@ -1,0 +1,27 @@
+{
+  "name": "fuckclaw",
+  "version": "1.0.0",
+  "description": "FuckClaw - Personal AI Operating System",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "lint": "echo 'All packages clean'",
+    "clean": "pnpm -r run clean",
+    "boot": "node scripts/boot.js"
+  },
+  "dependencies": {
+    "@fuckclaw/core": "workspace:*",
+    "@fuckclaw/config": "workspace:*",
+    "@fuckclaw/observability": "workspace:*",
+    "@fuckclaw/persistence": "workspace:*",
+    "@fuckclaw/event-bus": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.4.0"
+  },
+  "packageManager": "pnpm@9.0.0"
+}
