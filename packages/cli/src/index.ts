@@ -19,10 +19,14 @@ import path from 'node:path';
 import os from 'node:os';
 
 export * from './client/api-client.js';
+export * from './client/fuckclaw-client.js';
+export * from './tui/App.js';
 export * from './tui/banner.js';
 export * from './tui/status-bar.js';
 export * from './tui/stream-renderer.js';
 export * from './tui/app.js';
+export * from './tui/components/index.js';
+export * from './tui/hooks/index.js';
 export * from './commands/ask.command.js';
 export * from './commands/run.command.js';
 export * from './commands/status.command.js';
