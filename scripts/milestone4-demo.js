@@ -5,10 +5,12 @@ import fs from 'node:fs';
 class DemoMockProvider {
   name = 'demo-mock';
   async generate(req) {
+    const lastMessage = req.messages[req.messages.length - 1]?.content || '';
+    const firstUserMessage = req.messages.find(m => m.role === 'user')?.content || '';
     const historyText = JSON.stringify(req.messages);
 
     // If an observation just came in
-    if (historyText.includes('Observation:')) {
+    if (lastMessage.startsWith('Observation:')) {
       if (historyText.includes('workspace/editor.txt')) {
         return {
           content: 'Thought: The filesystem write observation is confirmed.\nFinal Answer: I wrote your favorite editor to workspace/editor.txt.',
@@ -16,8 +18,6 @@ class DemoMockProvider {
         };
       }
     }
-
-    const firstUserMessage = req.messages.find(m => m.role === 'user')?.content || '';
 
     // DEMO A: Session 1 (Memory capture via Kernel & Memory System)
     if (firstUserMessage.includes('remember my name is levi')) {

@@ -158,29 +158,43 @@ export class GoalDecomposer {
     }>;
   }> {
     const prompt = `You are the FuckClaw Deliberate Planner.
-Break down the following high-level goal into a clear Directed Acyclic Graph (DAG) of executable subtasks.
+Your role is to decompose high-level autonomous goals into a rigorous, verifiable Directed Acyclic Graph (DAG) of executable subtasks.
 
-Goal: "${goal}"
-${contextSummary ? `Context: ${contextSummary}` : ''}
+High-Level Goal: "${goal}"
+${contextSummary ? `Operational Context:\n${contextSummary}` : ''}
 
-Rules:
-1. Break into 2 to 6 atomic, actionable subtasks.
-2. For each step, provide a concise description of what needs to be accomplished.
-3. Explicitly declare dependencies for each step (which previous steps by 1-based index must complete first).
-4. Output your response STRICTLY as a JSON object with this format:
+Planning Principles:
+1. COMPLETE LIFECYCLE: Structure the plan to span necessary phases: environment discovery/inspection, concrete execution/implementation, and empirical verification (testing or checking state before finalization).
+2. ACTIONABLE & CONCRETE: Every step description must be an unambiguous, actionable directive that an autonomous execution agent can fulfill using filesystem, shell, or reasoning tools.
+3. ATOMIC & INDEPENDENT: Decompose into 2 to 6 focused subtasks. Do not combine unrelated actions into a single amorphous step.
+4. EXPLICIT DEPENDENCY GRAPH: Clearly specify dependencies using 1-based step indices. Steps that do not depend on previous outputs should be executable as soon as prerequisites complete.
+5. MANDATORY VERIFICATION: Include a verification or validation step prior to final delivery to confirm correctness with hard evidence.
+
+Output Format:
+Respond STRICTLY with a valid JSON object in the following format (no extraneous text outside the markdown code block):
 \`\`\`json
 {
-  "rationale": "High-level planning strategy",
+  "rationale": "Strategic reasoning behind this decomposition and verification approach",
   "steps": [
     {
       "index": 1,
-      "description": "Step 1 description",
+      "description": "Inspect and analyze relevant files, environment state, and constraints",
       "dependsOn": []
     },
     {
       "index": 2,
-      "description": "Step 2 description",
+      "description": "Implement core changes or execute primary operations",
       "dependsOn": [1]
+    },
+    {
+      "index": 3,
+      "description": "Verify implementation via test suite, file inspection, or validation command",
+      "dependsOn": [2]
+    },
+    {
+      "index": 4,
+      "description": "Finalize artifacts and output completion summary",
+      "dependsOn": [3]
     }
   ]
 }

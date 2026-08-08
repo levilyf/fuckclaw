@@ -122,6 +122,7 @@ export class SkillExecutor {
           const stepResult = await this.executeStepAction(
             step,
             variables,
+            manifest,
             context,
             currentDepth
           );
@@ -241,6 +242,7 @@ export class SkillExecutor {
   private async executeStepAction(
     step: SkillStep,
     variables: Record<string, any>,
+    manifest: SkillManifest,
     context?: ToolContext,
     currentDepth: number = 0
   ): Promise<{ tokenCost?: number }> {
@@ -266,8 +268,15 @@ export class SkillExecutor {
         }
 
         const renderedPrompt = this.renderTemplateString(action.prompt, variables);
+        const systemPrompt = manifest.systemPromptAugment
+          ? `You are executing step "${step.id}" of skill "${manifest.name}". ${manifest.systemPromptAugment}\nBe concise, factually grounded, and complete.`
+          : `You are executing step "${step.id}" of skill "${manifest.name}". Output concise, verified, and direct results based strictly on the provided variables without speculation.`;
+
         const response = await this.llmRouter.generate({
-          messages: [{ role: 'user', content: renderedPrompt }],
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: renderedPrompt },
+          ],
         });
 
         variables[action.outputVar] = response.content;

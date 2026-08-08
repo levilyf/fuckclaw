@@ -59,7 +59,7 @@ export class ReActLoop {
           conversation.push({ role: 'assistant', content: response.content });
           conversation.push({
             role: 'user',
-            content: 'The task explicitly requires filesystem or shell execution. You have not invoked a tool yet. Respond with a valid Action and Action Input now.',
+            content: 'CRITICAL: The task explicitly requires filesystem or shell execution. You emitted Final Answer without invoking any tools. Do not simulate or claim actions without real execution. Respond with a valid Action and Action Input now.',
           });
           if (currentStep === this.maxSteps) {
             throw new Error('Reasoning loop did not invoke a tool for a task that requires filesystem or shell execution');
@@ -151,18 +151,26 @@ export class ReActLoop {
   private buildSystemPrompt(context: ContextBundle): string {
     return `${context.systemPrompt}
 
-ReAct Protocol:
-- Available external tools: ${context.availableTools.join(', ')}.
-- To invoke a tool, respond exactly with:
-Thought: <brief reason>
-Action: <tool name>
-Action Input: <valid JSON object>
-- After an Observation, decide whether another tool is needed.
-- When the request is complete, respond exactly with:
-Thought: <brief completion reason>
-Final Answer: <result for the user>
-- For explicit file or shell tasks, use the appropriate external tool before Final Answer.
-- If the required information is already available in the Recalled Knowledge & Context section of the prompt or from general reasoning, answer directly using Final Answer without invoking any tools.`;
+ReAct Execution Protocol:
+- Available tools: ${context.availableTools.join(', ')}.
+- To execute a tool, emit EXACTLY this format:
+Thought: <concise analysis of current state, objective, and rationale for the next action>
+Action: <exact tool name from available tools>
+Action Input: <valid, well-formed JSON object matching the tool's schema>
+
+- After receiving an Observation:
+  1. Inspect the tool output carefully. If the tool returned an ERROR or unexpected output, diagnose the failure, explain your hypothesis in your next Thought, and try a corrected or alternative approach. Do not repeat the exact same failing action unchanged.
+  2. If the tool succeeded, evaluate whether the objective is fully satisfied or if further steps (such as verifying file content or running checks) are required.
+
+- When and ONLY when the task is fully achieved and verified (or for pure informational queries that require no tool actions):
+Thought: <concise summary of verified outcomes and completion evidence>
+Final Answer: <clear, direct response to the user with the final result>
+
+Strict Execution Rules:
+- Never claim an action succeeded unless you have observed successful tool output.
+- Never invent imaginary tool names or fake APIs; only use the declared available tools.
+- If the task requires filesystem modifications or command execution, you MUST execute the required tool calls before providing Final Answer.
+- If the requested information is already available in the Recalled Memory Context or from general knowledge without needing external system modifications, answer directly with Final Answer without invoking tools.`;
   }
 
   private taskRequiresTool(description: string): boolean {

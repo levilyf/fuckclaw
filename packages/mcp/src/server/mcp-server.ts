@@ -136,13 +136,41 @@ export class MCPServer {
           const prompts: MCPPrompt[] = [
             {
               name: 'memory_search',
-              description: 'Search FuckClaw memory for relevant context and knowledge',
+              description: 'Search FuckClaw memory for relevant context and verified facts',
               arguments: [
-                { name: 'query', description: 'Semantic search query', required: true },
+                { name: 'query', description: 'Semantic search query for persistent memory', required: true },
               ],
             },
           ];
           return { jsonrpc: '2.0', id, result: { prompts } };
+        }
+
+        case 'prompts/get': {
+          const promptParams = params as { name: string; arguments?: Record<string, string> };
+          if (promptParams?.name === 'memory_search') {
+            const query = promptParams.arguments?.query || '';
+            return {
+              jsonrpc: '2.0',
+              id,
+              result: {
+                description: 'Search FuckClaw memory for relevant context and verified facts',
+                messages: [
+                  {
+                    role: 'user',
+                    content: {
+                      type: 'text',
+                      text: `Retrieve verified memory records, prior task episodes, and semantic facts regarding: "${query}". Base your answer strictly on verified memories without speculation.`,
+                    },
+                  },
+                ],
+              },
+            };
+          }
+          return {
+            jsonrpc: '2.0',
+            id,
+            error: { code: -32602, message: `Unknown prompt: ${promptParams?.name}` },
+          };
         }
 
         default: {

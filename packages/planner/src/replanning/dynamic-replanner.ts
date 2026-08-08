@@ -183,22 +183,30 @@ export class DynamicReplanner {
     completedSteps: PlanStep[]
   ): Promise<PlanStep[]> {
     const prompt = `You are the FuckClaw Dynamic Replanner.
-A step in the following task plan has failed. Generate 1 or 2 targeted recovery/remediation steps to fix the problem before retrying.
+An execution step in an active task plan has failed. Formulate 1 or 2 concrete, targeted remediation steps to diagnose and eliminate the root cause of the failure so the goal can proceed to completion.
 
 High-Level Goal: "${goal}"
-Completed Steps:
-${completedSteps.map((s) => `- Step ${s.index}: ${s.description} (COMPLETED)`).join('\n') || 'None'}
+Completed Steps (Verified):
+${completedSteps.map((s) => `- Step ${s.index}: ${s.description} [COMPLETED]`).join('\n') || 'None'}
 
 Failed Step:
-- Description: ${failedStep.description}
-- Error: ${errorMessage}
+- Step Index: ${failedStep.index}
+- Description: "${failedStep.description}"
+- Failure Observation / Error: "${errorMessage}"
 
-Generate JSON with recovery steps to insert:
+Replanning Directives:
+1. ROOT-CAUSE REMEDIATION: Address the specific failure mechanism (e.g., missing directory or file, compile/test failure, incorrect arguments, broken syntax).
+2. CONCRETE ACTIONS: Describe exact remedial tasks (e.g., "Diagnose error and fix broken syntax in <file>", "Create missing parent directory and reset permissions", "Inspect diagnostic logs and adjust configuration").
+3. PERSISTENT RESOLUTION: Do not propose steps that surrender or skip essential work. Ensure the remediation creates the necessary conditions for the retried step to succeed.
+4. BOUNDED SCOPE: Produce only 1 or 2 atomic recovery steps directly necessary to restore viability before the failed step is retried.
+
+Output Format:
+Respond STRICTLY with a JSON object in this format:
 \`\`\`json
 {
   "recoverySteps": [
     {
-      "description": "Fix/resolve the cause of failure"
+      "description": "Specific diagnostic and remedial action to resolve the failure"
     }
   ]
 }
