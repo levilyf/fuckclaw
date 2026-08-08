@@ -2,7 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { Server } from 'node:http';
 import { IObservability } from '@fuckclaw/observability';
 import { IEventBus, SystemEvent } from '@fuckclaw/event-bus';
-import { AgentKernel } from '@fuckclaw/kernel';
+import { IAgentKernel } from '@fuckclaw/kernel';
 import { WebSocketStreamMessage, NetworkConfig } from '../types.js';
 
 export class WebSocketStreamServer {
@@ -11,7 +11,7 @@ export class WebSocketStreamServer {
   private clients = new Set<WebSocket>();
 
   constructor(
-    private kernel: AgentKernel,
+    private kernel: IAgentKernel,
     private eventBus: IEventBus,
     public readonly config: NetworkConfig,
     private logger?: IObservability

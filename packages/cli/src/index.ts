@@ -84,8 +84,6 @@ export async function createFuckClawRuntime(
   const persistence = new PersistenceLayer(persistencePath, logger);
   const eventBus = new EventBus(persistence, logger);
   const workspace = new WorkspaceManager(config, logger);
-  const memorySystem = new MemorySystem(persistence, logger, eventBus);
-  const knowledgeGraph = new KnowledgeGraph(persistence, logger, eventBus);
 
   const toolRuntime = new ToolRuntime(logger, eventBus);
   toolRuntime.register(new ShellTool());
@@ -124,6 +122,9 @@ export async function createFuckClawRuntime(
       );
     }
   }
+
+  const memorySystem = new MemorySystem(persistence, logger, eventBus);
+  const knowledgeGraph = new KnowledgeGraph(persistence, logger, eventBus);
 
   const skillsEngine = new SkillsEngine(toolRuntime, llmRouter, logger, eventBus);
   await skillsEngine.loadFromDirectory(workspace.getDirectory('skills'));

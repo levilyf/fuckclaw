@@ -1,6 +1,6 @@
 import { IObservability } from '@fuckclaw/observability';
 import { IEventBus } from '@fuckclaw/event-bus';
-import { AgentKernel } from '@fuckclaw/kernel';
+import { IAgentKernel } from '@fuckclaw/kernel';
 import { IMemorySystem } from '@fuckclaw/memory';
 import { IKnowledgeGraph } from '@fuckclaw/knowledge-graph';
 import { IToolRuntime } from '@fuckclaw/tool-runtime';
@@ -22,7 +22,7 @@ export class NetworkManager implements INetworkManager {
   private currentHost = '127.0.0.1';
 
   constructor(
-    kernel: AgentKernel,
+    kernel: IAgentKernel,
     eventBus: IEventBus,
     logger: IObservability,
     config: Partial<NetworkConfig> = {},

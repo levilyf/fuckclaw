@@ -1,7 +1,7 @@
 import http, { IncomingMessage, ServerResponse, Server } from 'node:http';
 import { URL } from 'node:url';
 import { IObservability } from '@fuckclaw/observability';
-import { AgentKernel } from '@fuckclaw/kernel';
+import { IAgentKernel } from '@fuckclaw/kernel';
 import { IMemorySystem } from '@fuckclaw/memory';
 import { IKnowledgeGraph } from '@fuckclaw/knowledge-graph';
 import { IToolRuntime } from '@fuckclaw/tool-runtime';
@@ -27,7 +27,7 @@ export class HttpServer {
   private routes: RouteEntry[] = [];
 
   constructor(
-    private kernel: AgentKernel,
+    private kernel: IAgentKernel,
     private config: NetworkConfig,
     private logger?: IObservability,
     private memory?: IMemorySystem,
