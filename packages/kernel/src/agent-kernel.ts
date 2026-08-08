@@ -40,12 +40,16 @@ export class AgentKernel implements IAgentKernel {
     private workspace: IWorkspaceManager,
     toolRuntime: IToolRuntime,
     public readonly llmRouter: LLMRouter,
-    private memorySystem?: IMemorySystem
+    private memorySystem?: IMemorySystem,
+    reasoningEngine?: IReasoningEngineRunner
   ) {
     this.stateMachine = new KernelStateMachine(logger, eventBus);
     this.taskStateMachine = new TaskStateMachine(persistence, eventBus);
     this.contextManager = new ContextManager(workspace, toolRuntime, memorySystem);
     this.checkpointManager = new CheckpointManager(persistence, logger);
+    if (reasoningEngine) {
+      this.reasoningEngine = reasoningEngine;
+    }
   }
 
   setReasoningEngine(runner: IReasoningEngineRunner) {

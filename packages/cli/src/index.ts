@@ -129,6 +129,8 @@ export async function createFuckClawRuntime(
   const skillsEngine = new SkillsEngine(toolRuntime, llmRouter, logger, eventBus);
   await skillsEngine.loadFromDirectory(workspace.getDirectory('skills'));
 
+  const reasoningEngine = new ReasoningEngine(logger, eventBus, toolRuntime, llmRouter);
+
   const kernel = new AgentKernel(
     config,
     logger,
@@ -137,11 +139,9 @@ export async function createFuckClawRuntime(
     workspace,
     toolRuntime,
     llmRouter,
-    memorySystem
+    memorySystem,
+    reasoningEngine
   );
-
-  const reasoningEngine = new ReasoningEngine(logger, eventBus, toolRuntime, llmRouter);
-  kernel.setReasoningEngine(reasoningEngine);
 
   const planner = new Planner(kernel, logger, eventBus, llmRouter, persistence);
   const scheduler = new Scheduler(kernel, logger, eventBus, workspace, persistence);
