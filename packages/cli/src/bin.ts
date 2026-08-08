@@ -18,7 +18,7 @@ const subArgs = args.slice(1);
 
 async function main() {
   if (!command || command === 'tui' || command === 'interactive') {
-    const runtime = await createFuckClawRuntime();
+    const runtime = await createFuckClawRuntime({}, undefined, process.env, { allowUnconfiguredLLM: true });
     const tui = new InteractiveTUI(runtime);
     await tui.start();
     return;
@@ -45,7 +45,7 @@ ${ANSI.bold}Commands:${ANSI.reset}
     process.exit(0);
   }
 
-  const runtime = await createFuckClawRuntime();
+  const runtime = await createFuckClawRuntime({}, undefined, process.env, { allowUnconfiguredLLM: true });
 
   try {
     switch (command) {

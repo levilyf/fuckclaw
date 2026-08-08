@@ -50,10 +50,15 @@ export interface FuckClawRuntimeInstance {
   shutdown: () => Promise<void>;
 }
 
+export interface CreateRuntimeOptions {
+  allowUnconfiguredLLM?: boolean;
+}
+
 export async function createFuckClawRuntime(
   customConfig: Partial<GlobalConfig> = {},
   customLLMProvider?: ILLMProvider,
-  environment: NodeJS.ProcessEnv = process.env
+  environment: NodeJS.ProcessEnv = process.env,
+  options: CreateRuntimeOptions = {}
 ): Promise<FuckClawRuntimeInstance> {
   const environmentConfig = ConfigManager.fromEnvironment(environment).get();
   const rawRoot = customConfig.workspace?.root ?? environmentConfig.workspace?.root ?? '~/.fuckclaw';
@@ -87,20 +92,33 @@ export async function createFuckClawRuntime(
     llmRouter.registerProvider(customLLMProvider, true);
   } else {
     const llm = config.get().llm;
-    if (!llm || !llm.baseUrl || !llm.apiKey) {
+    if (llm && llm.baseUrl && llm.apiKey) {
+      llmRouter.registerProvider(
+        new OpenAICompatibleProvider({
+          baseUrl: llm.baseUrl,
+          apiKey: llm.apiKey,
+          model: llm.model,
+        }),
+        true
+      );
+    } else if (options.allowUnconfiguredLLM) {
+      llmRouter.registerProvider(
+        {
+          name: 'unconfigured-fallback',
+          generate: async () => {
+            throw new Error(
+              'No LLM provider configured. Please set FUCKCLAW_LLM_BASE_URL, FUCKCLAW_LLM_API_KEY, and FUCKCLAW_LLM_MODEL or update ~/.fuckclaw/config/fuckclaw.toml.'
+            );
+          },
+        },
+        true
+      );
+    } else {
       persistence.close();
       throw new Error(
         'OpenAI-compatible LLM configuration is required. Set FUCKCLAW_LLM_BASE_URL, FUCKCLAW_LLM_API_KEY, and FUCKCLAW_LLM_MODEL.'
       );
     }
-    llmRouter.registerProvider(
-      new OpenAICompatibleProvider({
-        baseUrl: llm.baseUrl,
-        apiKey: llm.apiKey,
-        model: llm.model,
-      }),
-      true
-    );
   }
 
   const skillsEngine = new SkillsEngine(toolRuntime, llmRouter, logger, eventBus);
