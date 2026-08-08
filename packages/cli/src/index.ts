@@ -1,26 +1,52 @@
-import { ConfigManager, GlobalConfig } from '@fuckclaw/config';
-import { Logger } from '@fuckclaw/observability';
-import { PersistenceLayer } from '@fuckclaw/persistence';
-import { EventBus } from '@fuckclaw/event-bus';
-import { WorkspaceManager } from '@fuckclaw/workspace';
-import { ToolRuntime, ShellTool, FilesystemTool } from '@fuckclaw/tool-runtime';
+import { ConfigManager, GlobalConfig, IConfigManager } from '@fuckclaw/config';
+import { Logger, IObservability } from '@fuckclaw/observability';
+import { PersistenceLayer, IPersistenceLayer } from '@fuckclaw/persistence';
+import { EventBus, IEventBus } from '@fuckclaw/event-bus';
+import { WorkspaceManager, IWorkspaceManager } from '@fuckclaw/workspace';
+import { ToolRuntime, ShellTool, FilesystemTool, IToolRuntime } from '@fuckclaw/tool-runtime';
 import { ILLMProvider, LLMRouter, OpenAICompatibleProvider } from '@fuckclaw/llm-router';
-import { MemorySystem } from '@fuckclaw/memory';
-import { KnowledgeGraph } from '@fuckclaw/knowledge-graph';
-import { SkillsEngine } from '@fuckclaw/skills';
+import { MemorySystem, IMemorySystem } from '@fuckclaw/memory';
+import { KnowledgeGraph, IKnowledgeGraph } from '@fuckclaw/knowledge-graph';
+import { SkillsEngine, ISkillEngine } from '@fuckclaw/skills';
 import { AgentKernel, Task } from '@fuckclaw/kernel';
 import { ReasoningEngine } from '@fuckclaw/reasoning';
 import { Planner } from '@fuckclaw/planner';
 import { Scheduler } from '@fuckclaw/scheduler';
+import { MCPManager } from '@fuckclaw/mcp';
+import { PluginManager } from '@fuckclaw/plugins';
+import { NetworkManager } from '@fuckclaw/network';
 import path from 'node:path';
 import os from 'node:os';
 
+export * from './client/api-client.js';
+export * from './tui/banner.js';
+export * from './tui/status-bar.js';
+export * from './tui/stream-renderer.js';
+export * from './tui/app.js';
+export * from './commands/ask.command.js';
+export * from './commands/run.command.js';
+export * from './commands/status.command.js';
+export * from './commands/serve.command.js';
+export * from './commands/mcp.command.js';
+export * from './commands/plugins.command.js';
+export * from './commands/config.command.js';
+
 export interface FuckClawRuntimeInstance {
+  config: IConfigManager;
+  logger: IObservability;
+  persistence: IPersistenceLayer;
+  eventBus: IEventBus;
+  workspace: IWorkspaceManager;
+  toolRuntime: IToolRuntime;
   kernel: AgentKernel;
   planner: Planner;
   scheduler: Scheduler;
-  knowledgeGraph: KnowledgeGraph;
-  skillsEngine: SkillsEngine;
+  memory: IMemorySystem;
+  knowledgeGraph: IKnowledgeGraph;
+  skillsEngine: ISkillEngine;
+  mcpManager: MCPManager;
+  pluginManager: PluginManager;
+  networkManager: NetworkManager;
   shutdown: () => Promise<void>;
 }
 
@@ -58,7 +84,7 @@ export async function createFuckClawRuntime(
 
   const llmRouter = new LLMRouter(logger, eventBus);
   if (customLLMProvider) {
-    llmRouter.registerProvider(customLLMProvider);
+    llmRouter.registerProvider(customLLMProvider, true);
   } else {
     const llm = config.get().llm;
     if (!llm || !llm.baseUrl || !llm.apiKey) {
@@ -67,11 +93,14 @@ export async function createFuckClawRuntime(
         'OpenAI-compatible LLM configuration is required. Set FUCKCLAW_LLM_BASE_URL, FUCKCLAW_LLM_API_KEY, and FUCKCLAW_LLM_MODEL.'
       );
     }
-    llmRouter.registerProvider(new OpenAICompatibleProvider({
-      baseUrl: llm.baseUrl,
-      apiKey: llm.apiKey,
-      model: llm.model,
-    }));
+    llmRouter.registerProvider(
+      new OpenAICompatibleProvider({
+        baseUrl: llm.baseUrl,
+        apiKey: llm.apiKey,
+        model: llm.model,
+      }),
+      true
+    );
   }
 
   const skillsEngine = new SkillsEngine(toolRuntime, llmRouter, logger, eventBus);
@@ -94,16 +123,54 @@ export async function createFuckClawRuntime(
   const planner = new Planner(kernel, logger, eventBus, llmRouter, persistence);
   const scheduler = new Scheduler(kernel, logger, eventBus, workspace, persistence);
 
+  // Milestone 7 Subsystems
+  const mcpManager = new MCPManager(toolRuntime, workspace, knowledgeGraph, logger);
+  const pluginManager = new PluginManager(
+    eventBus,
+    toolRuntime,
+    logger,
+    workspace,
+    skillsEngine,
+    memorySystem,
+    knowledgeGraph
+  );
+  const networkManager = new NetworkManager(
+    kernel,
+    eventBus,
+    logger,
+    {
+      host: '127.0.0.1',
+      port: 8420,
+    },
+    memorySystem,
+    knowledgeGraph,
+    toolRuntime,
+    scheduler
+  );
+
   await kernel.boot();
   await scheduler.start();
 
   return {
+    config,
+    logger,
+    persistence,
+    eventBus,
+    workspace,
+    toolRuntime,
     kernel,
     planner,
     scheduler,
+    memory: memorySystem,
     knowledgeGraph,
     skillsEngine,
+    mcpManager,
+    pluginManager,
+    networkManager,
     shutdown: async () => {
+      await networkManager.stop();
+      await pluginManager.shutdown();
+      await mcpManager.shutdown();
       await scheduler.stop();
       await kernel.shutdown();
       persistence.close();

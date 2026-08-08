@@ -47,6 +47,12 @@ importers:
       '@fuckclaw/workspace':
         specifier: workspace:*
         version: link:packages/workspace
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
+      ws:
+        specifier: ^8.21.3
+        version: 8.21.3
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
@@ -81,9 +87,15 @@ importers:
       '@fuckclaw/llm-router':
         specifier: workspace:*
         version: link:../llm-router
+      '@fuckclaw/mcp':
+        specifier: workspace:*
+        version: link:../mcp
       '@fuckclaw/memory':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../memory
+      '@fuckclaw/network':
+        specifier: workspace:*
+        version: link:../network
       '@fuckclaw/observability':
         specifier: workspace:*
         version: link:../observability
@@ -93,6 +105,9 @@ importers:
       '@fuckclaw/planner':
         specifier: workspace:*
         version: link:../planner
+      '@fuckclaw/plugins':
+        specifier: workspace:*
+        version: link:../plugins
       '@fuckclaw/reasoning':
         specifier: workspace:*
         version: link:../reasoning
@@ -259,6 +274,40 @@ importers:
         specifier: ^1.4.0
         version: 1.6.1(@types/node@20.19.43)
 
+  packages/mcp:
+    dependencies:
+      '@fuckclaw/core':
+        specifier: workspace:*
+        version: link:../core
+      '@fuckclaw/event-bus':
+        specifier: workspace:*
+        version: link:../event-bus
+      '@fuckclaw/knowledge-graph':
+        specifier: workspace:*
+        version: link:../knowledge-graph
+      '@fuckclaw/memory':
+        specifier: workspace:*
+        version: link:../memory
+      '@fuckclaw/observability':
+        specifier: workspace:*
+        version: link:../observability
+      '@fuckclaw/tool-runtime':
+        specifier: workspace:*
+        version: link:../tool-runtime
+      '@fuckclaw/workspace':
+        specifier: workspace:*
+        version: link:../workspace
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.43
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.4.0
+        version: 1.6.1(@types/node@20.19.43)
+
   packages/memory:
     dependencies:
       '@fuckclaw/core':
@@ -277,6 +326,49 @@ importers:
         specifier: ^2.4.1
         version: 2.4.1
     devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.4.0
+        version: 1.6.1(@types/node@20.19.43)
+
+  packages/network:
+    dependencies:
+      '@fuckclaw/core':
+        specifier: workspace:*
+        version: link:../core
+      '@fuckclaw/event-bus':
+        specifier: workspace:*
+        version: link:../event-bus
+      '@fuckclaw/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@fuckclaw/knowledge-graph':
+        specifier: workspace:*
+        version: link:../knowledge-graph
+      '@fuckclaw/memory':
+        specifier: workspace:*
+        version: link:../memory
+      '@fuckclaw/observability':
+        specifier: workspace:*
+        version: link:../observability
+      '@fuckclaw/scheduler':
+        specifier: workspace:*
+        version: link:../scheduler
+      '@fuckclaw/tool-runtime':
+        specifier: workspace:*
+        version: link:../tool-runtime
+      ws:
+        specifier: ^8.18.0
+        version: 8.21.3
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.43
+      '@types/ws':
+        specifier: ^8.5.10
+        version: 8.18.1
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
@@ -349,6 +441,46 @@ importers:
         specifier: ^2.3.1
         version: 2.4.1
     devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.4.0
+        version: 1.6.1(@types/node@20.19.43)
+
+  packages/plugins:
+    dependencies:
+      '@fuckclaw/core':
+        specifier: workspace:*
+        version: link:../core
+      '@fuckclaw/event-bus':
+        specifier: workspace:*
+        version: link:../event-bus
+      '@fuckclaw/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@fuckclaw/knowledge-graph':
+        specifier: workspace:*
+        version: link:../knowledge-graph
+      '@fuckclaw/memory':
+        specifier: workspace:*
+        version: link:../memory
+      '@fuckclaw/observability':
+        specifier: workspace:*
+        version: link:../observability
+      '@fuckclaw/skills':
+        specifier: workspace:*
+        version: link:../skills
+      '@fuckclaw/tool-runtime':
+        specifier: workspace:*
+        version: link:../tool-runtime
+      '@fuckclaw/workspace':
+        specifier: workspace:*
+        version: link:../workspace
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.43
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
@@ -782,6 +914,9 @@ packages:
 
   '@types/node@20.19.43':
     resolution: {integrity: sha512-6oYBAi5ikg4Pl+kGsoYtawUMBT2zZMCvPNF7pVLnHZfd1zf38DRiWn/gT01RYCdUqkv7Fhr+C9ot4/tb+2sVvA==}
+
+  '@types/ws@8.18.1':
+    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@vitest/expect@1.6.1':
     resolution: {integrity: sha512-jXL+9+ZNIJKruofqXuuTClf44eSpcHlgj3CiuNihUF3Ioujtmc0zIa3UJOW5RjDK1YLBJZnWBlPuqhYycLioog==}
@@ -1235,6 +1370,18 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
+  ws@8.21.3:
+    resolution: {integrity: sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
   yaml@2.9.0:
     resolution: {integrity: sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==}
     engines: {node: '>= 14.6'}
@@ -1413,6 +1560,10 @@ snapshots:
   '@types/node@20.19.43':
     dependencies:
       undici-types: 6.21.0
+
+  '@types/ws@8.18.1':
+    dependencies:
+      '@types/node': 20.19.43
 
   '@vitest/expect@1.6.1':
     dependencies:
@@ -1901,6 +2052,8 @@ snapshots:
       stackback: 0.0.2
 
   wrappy@1.0.2: {}
+
+  ws@8.21.3: {}
 
   yaml@2.9.0: {}
 

@@ -1,0 +1,29 @@
+{
+  "name": "@fuckclaw/network",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fuckclaw/core": "workspace:*",
+    "@fuckclaw/event-bus": "workspace:*",
+    "@fuckclaw/kernel": "workspace:*",
+    "@fuckclaw/knowledge-graph": "workspace:*",
+    "@fuckclaw/memory": "workspace:*",
+    "@fuckclaw/observability": "workspace:*",
+    "@fuckclaw/scheduler": "workspace:*",
+    "@fuckclaw/tool-runtime": "workspace:*",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/ws": "^8.5.10",
+    "typescript": "^5.4.0",
+    "vitest": "^1.4.0"
+  }
+}

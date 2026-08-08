@@ -37,9 +37,13 @@ export interface ToolResult {
 export interface ITool {
   name: string;
   description: string;
-  schema: z.ZodSchema;
+  schema?: z.ZodSchema;
+  inputSchema?: Record<string, unknown>;
+  source?: { type: 'native' | 'mcp' | 'plugin'; pluginId?: string };
   execute(params: unknown): Promise<ToolResult>;
 }
+
+export type ToolDefinition = ITool;
 
 export class ShellTool implements ITool {
   name = 'shell';
@@ -216,6 +220,7 @@ export interface ToolContext {
 
 export interface IToolRuntime {
   register(tool: ITool): void;
+  unregister(name: string): boolean;
   get(name: string): ITool | undefined;
   list(): ITool[];
   has(name: string): boolean;
@@ -231,6 +236,9 @@ export class ToolRuntime implements IToolRuntime {
   ) {}
 
   register(tool: ITool): void {
+    if (!tool.source) {
+      tool.source = { type: 'native' };
+    }
     this.tools.set(tool.name, tool);
     this.logger.log({
       level: 'debug',
@@ -238,6 +246,19 @@ export class ToolRuntime implements IToolRuntime {
       message: `Tool registered: ${tool.name}`,
       metadata: { toolName: tool.name },
     });
+  }
+
+  unregister(name: string): boolean {
+    const deleted = this.tools.delete(name);
+    if (deleted) {
+      this.logger.log({
+        level: 'debug',
+        module: 'tool-runtime',
+        message: `Tool unregistered: ${name}`,
+        metadata: { toolName: name },
+      });
+    }
+    return deleted;
   }
 
   getTool(name: string): ITool | undefined {

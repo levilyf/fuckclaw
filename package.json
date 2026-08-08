@@ -27,6 +27,8 @@
     "@fuckclaw/skills": "workspace:*",
     "@fuckclaw/tool-runtime": "workspace:*",
     "@fuckclaw/workspace": "workspace:*",
+    "@types/ws": "^8.18.1",
+    "ws": "^8.21.3",
     "yaml": "^2.9.0"
   },
   "devDependencies": {

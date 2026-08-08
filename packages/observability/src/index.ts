@@ -22,6 +22,10 @@ export interface LogEntry {
 
 export interface IObservability {
   log(entry: Omit<LogEntry, 'timestamp'>): void;
+  info?(message: string, metadata?: Record<string, unknown>): void;
+  warn?(message: string, metadata?: Record<string, unknown>): void;
+  error?(message: string, metadata?: Record<string, unknown>): void;
+  debug?(message: string, metadata?: Record<string, unknown>): void;
   getTracer?(): ITracer;
   getMetrics?(): IMetricsRegistry;
 }
@@ -33,6 +37,22 @@ export class Logger implements IObservability {
   constructor(private configManager: IConfigManager) {
     this.tracer = new Tracer();
     this.metrics = new MetricsRegistry();
+  }
+
+  info(message: string, metadata?: Record<string, unknown>): void {
+    this.log({ level: 'info', message, metadata });
+  }
+
+  warn(message: string, metadata?: Record<string, unknown>): void {
+    this.log({ level: 'warn', message, metadata });
+  }
+
+  error(message: string, metadata?: Record<string, unknown>): void {
+    this.log({ level: 'error', message, metadata });
+  }
+
+  debug(message: string, metadata?: Record<string, unknown>): void {
+    this.log({ level: 'debug', message, metadata });
   }
 
   log(entry: Omit<LogEntry, 'timestamp'>): void {

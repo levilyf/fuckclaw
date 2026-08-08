@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createFuckClawRuntime } from '../src/index.js';
+import { createFuckClawRuntime, FuckClawClient } from '../src/index.js';
 import { TaskState } from '@fuckclaw/kernel';
 import { ILLMProvider, GenerationRequest, GenerationResponse } from '@fuckclaw/llm-router';
 import fs from 'node:fs';
@@ -66,12 +66,45 @@ describe('CLI Runtime Integration', () => {
       // Verify KnowledgeGraph and SkillsEngine on runtime
       expect(runtime.knowledgeGraph).toBeDefined();
       expect(runtime.skillsEngine).toBeDefined();
+      expect(runtime.mcpManager).toBeDefined();
+      expect(runtime.pluginManager).toBeDefined();
+      expect(runtime.networkManager).toBeDefined();
 
       const entity = await runtime.knowledgeGraph.createEntity({
         type: 'project',
         name: 'cli-test-project',
       });
       expect(entity.name).toBe('cli-test-project');
+
+      // Verify MCP subsystem
+      expect(runtime.mcpManager.listServers().length).toBe(0);
+
+      // Verify Plugin subsystem
+      expect(runtime.pluginManager.list().length).toBe(0);
+    } finally {
+      await runtime.shutdown();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('verifies FuckClawClient communication with network server daemon', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fuckclaw-cli-client-test-'));
+    const runtime = await createFuckClawRuntime(
+      { workspace: { root: tempDir } },
+      new ReActFilesystemMockProvider(),
+      {}
+    );
+
+    try {
+      const { host, port } = await runtime.networkManager.start({ port: 0 });
+      const client = new FuckClawClient({ baseUrl: `http://${host}:${port}` });
+
+      const health = await client.getHealth();
+      expect(health.status).toBe('healthy');
+      expect(health.kernelState).toBe('idle');
+
+      const tools = await client.listTools();
+      expect(tools.length).toBeGreaterThan(0);
     } finally {
       await runtime.shutdown();
       fs.rmSync(tempDir, { recursive: true, force: true });
