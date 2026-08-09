@@ -57,7 +57,8 @@ export class LLMRouter implements ILLMRouter {
 
     const providerList = RouteSelector.select(this.providers, request.provider, this.defaultProviderName);
 
-    let lastError: unknown;
+    const causes: Array<Record<string, unknown>> = [];
+    let lastError: any;
     for (const provider of providerList) {
       try {
         const response = await provider.generate(request);
@@ -97,18 +98,36 @@ export class LLMRouter implements ILLMRouter {
         this.cache.set(cacheKey, response);
 
         return response;
-      } catch (err) {
+      } catch (err: any) {
         lastError = err;
+        causes.push({
+          code: err?.code,
+          provider: err?.provider ?? provider.name,
+          model: err?.model ?? request.model,
+          endpoint: err?.endpoint,
+          httpStatus: err?.httpStatus,
+          message: err?.message ?? String(err),
+        });
         this.logger.log({
           level: 'warn',
           module: 'llm-router',
           message: `Provider "${provider.name}" failed, evaluating cascade fallback`,
-          metadata: { error: String(err) },
+          metadata: { error: err?.message ?? String(err), code: err?.code, provider: provider.name },
         });
       }
     }
 
-    throw new Error(`All LLM providers failed. Last error: ${String(lastError)}`);
+    const finalError = new Error(
+      `All LLM providers failed. Last error: ${lastError?.message ?? String(lastError)}`
+    ) as any;
+    finalError.code = lastError?.code ?? 'LLM_PROVIDER_FAILURE';
+    finalError.provider = lastError?.provider;
+    finalError.model = lastError?.model ?? request.model;
+    finalError.endpoint = lastError?.endpoint;
+    finalError.httpStatus = lastError?.httpStatus;
+    finalError.causes = causes;
+    finalError.cause = lastError;
+    throw finalError;
   }
 
   public estimateCost(_model: string, promptTokens: number, completionTokens: number): number {

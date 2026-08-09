@@ -1,4 +1,4 @@
-import { ConfigManager, GlobalConfig, IConfigManager } from '@fuckclaw/config';
+import { ConfigManager, GlobalConfig, IConfigManager, Keystore } from '@fuckclaw/config';
 import { Logger, IObservability } from '@fuckclaw/observability';
 import { PersistenceLayer, IPersistenceLayer } from '@fuckclaw/persistence';
 import { EventBus, IEventBus } from '@fuckclaw/event-bus';
@@ -39,6 +39,7 @@ export interface FuckClawRuntimeInstance {
   eventBus: IEventBus;
   workspace: IWorkspaceManager;
   toolRuntime: IToolRuntime;
+  llmRouter: LLMRouter;
   kernel: AgentKernel;
   planner: Planner;
   scheduler: Scheduler;
@@ -58,31 +59,98 @@ export interface CreateRuntimeOptions {
   disableConsoleLogging?: boolean;
 }
 
+function resolveHome(environment: NodeJS.ProcessEnv = process.env): string {
+  return environment.HOME || environment.USERPROFILE || os.homedir();
+}
+
+function resolvePathWithHome(rawPath: string, environment: NodeJS.ProcessEnv = process.env): string {
+  return rawPath.startsWith('~/') ? path.join(resolveHome(environment), rawPath.slice(2)) : path.resolve(rawPath);
+}
+
+function resolveGlobalConfigPath(environment: NodeJS.ProcessEnv = process.env): string {
+  return path.join(resolveHome(environment), '.fuckclaw', 'config', 'fuckclaw.toml');
+}
+
+function isLocalEndpoint(rawUrl: string): boolean {
+  try {
+    const hostname = new URL(rawUrl).hostname.toLowerCase();
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname.startsWith('192.168.') || hostname.startsWith('10.') || /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname);
+  } catch {
+    return false;
+  }
+}
+
+function isOpenAICompatibleProvider(name: string): boolean {
+  return name === 'openai' || name === 'openai-compatible';
+}
+
+export async function registerConfiguredProvider(
+  config: IConfigManager,
+  llmRouter: LLMRouter,
+  environment: NodeJS.ProcessEnv = process.env
+): Promise<boolean> {
+  const cfg = config.get();
+  const providers = cfg.providers || {};
+  const llm = cfg.llm || {} as any;
+  const activeProviderName = (llm as any).provider || 'anthropic';
+  const providerConfig = (providers as any)[activeProviderName] || {};
+  const rawProviderConfig = Object.keys(providerConfig).length > 0 ? providerConfig : llm;
+  const baseUrl = (providerConfig as any).baseUrl || (rawProviderConfig as any).baseUrl || (llm as any).baseUrl || '';
+  const model = (providerConfig as any).model || (rawProviderConfig as any).model || (llm as any).model || 'default';
+  const secretKey = `providers.${activeProviderName}.apiKey`;
+  const keystorePath = path.join(path.dirname(resolveGlobalConfigPath(environment)), 'env.json.enc');
+  const keystore = new Keystore(keystorePath);
+  const persistedSecret = await keystore.getSecret(secretKey);
+  const apiKey = (providerConfig as any).apiKey || (rawProviderConfig as any).apiKey || (llm as any).apiKey || persistedSecret || '';
+
+  const hasEndpoint = typeof baseUrl === 'string' && baseUrl.trim().length > 0;
+  const hasModel = typeof model === 'string' && model.trim().length > 0;
+  const hasAuth = typeof apiKey === 'string' && apiKey.trim().length > 0;
+  const isCompatible = activeProviderName === 'openai' || activeProviderName === 'openai-compatible' || activeProviderName === 'anthropic' || activeProviderName === 'google';
+  const canUseUnauthenticatedLocal = isOpenAICompatibleProvider(activeProviderName) && hasEndpoint && isLocalEndpoint(baseUrl);
+
+  if (!isCompatible || !hasModel || !(hasAuth || canUseUnauthenticatedLocal)) {
+    return false;
+  }
+
+  if (isOpenAICompatibleProvider(activeProviderName) && !hasEndpoint) {
+    return false;
+  }
+
+  llmRouter.registerProvider(
+    ProviderFactory.createOpenAI({
+      baseUrl: baseUrl || '',
+      apiKey: apiKey || '',
+      model,
+    }),
+    true
+  );
+  return true;
+}
+
 export async function createFuckClawRuntime(
   customConfig: Partial<GlobalConfig> = {},
   customLLMProvider?: ILLMProvider,
   environment: NodeJS.ProcessEnv = process.env,
   options: CreateRuntimeOptions = {}
 ): Promise<FuckClawRuntimeInstance> {
-  const environmentConfig = ConfigManager.fromEnvironment(environment).get();
-  
-  // Resolve workspace directory
-  const rawRoot = customConfig.workspace?.root ?? environmentConfig.workspace?.root ?? '~/.fuckclaw';
-  const resolvedRoot = rawRoot.startsWith('~/')
-    ? path.join(os.homedir(), rawRoot.slice(2))
-    : path.resolve(rawRoot);
-  const persistencePath = rawRoot === ':memory:' ? ':memory:' : path.join(resolvedRoot, 'fuckclaw.db');
+  const globalConfigPath = resolveGlobalConfigPath(environment);
+  const overrides: Record<string, unknown> = {};
+  if (customConfig.workspace) overrides.workspace = customConfig.workspace;
+  if (customConfig.logging) overrides.logging = customConfig.logging;
+  if (customConfig.providers) overrides.providers = customConfig.providers;
+  if (customConfig.llm) overrides.llm = customConfig.llm;
 
   const config = new ConfigManager({
-    workspace: customConfig.workspace ?? environmentConfig.workspace,
-    logging: customConfig.logging ?? environmentConfig.logging,
-    providers: customConfig.providers ?? environmentConfig.providers,
-    ...(customConfig.llm
-      ? { llm: customConfig.llm }
-      : environmentConfig.llm
-        ? { llm: environmentConfig.llm }
-        : {}),
+    environment,
+    globalConfigPath,
+    overrides,
   });
+
+  // Resolve workspace directory from the final layered config, not from stale partial config.
+  const rawRoot = config.get().workspace?.root ?? '~/.fuckclaw';
+  const resolvedRoot = rawRoot === ':memory:' ? ':memory:' : resolvePathWithHome(rawRoot, environment);
+  const persistencePath = rawRoot === ':memory:' ? ':memory:' : path.join(resolvedRoot, 'fuckclaw.db');
   const logger = new Logger(config);
   
   // Conditionally disable console logging for TUI/Interactive interfaces
@@ -125,56 +193,14 @@ export async function createFuckClawRuntime(
   if (customLLMProvider) {
     llmRouter.registerProvider(customLLMProvider, true);
   } else {
-    const configProvidersObj = config.get().providers || (config as any).providers || {};
-    const configLlmObj = config.get().llm || (config as any).llm || {};
-  
-    // We check both the structured providers object and the legacy llm object
-    const activeProviderName = configLlmObj.provider || (config as any).llm?.provider || 'anthropic';
-    const activeProviderConfig = configProvidersObj[activeProviderName] || {};
-    
-    // Explicitly check the deeply nested property if activeProviderConfig is missing it, because tests pass nested config
-    const rawProviderConfig = (config.get() as any)?.providers?.[activeProviderName] || (config as any)?.providers?.[activeProviderName] || (config.get() as any)?.llm || (config as any)?.llm || {};
-  
-    const apiKey = (activeProviderConfig as any).apiKey || (rawProviderConfig as any).apiKey || (configLlmObj as any).apiKey || (config as any).llm?.apiKey || '';
-    const baseUrl = (activeProviderConfig as any).baseUrl || (rawProviderConfig as any).baseUrl || (configLlmObj as any).baseUrl || (config as any).llm?.baseUrl || '';
-    const model = (activeProviderConfig as any).model || (rawProviderConfig as any).model || (configLlmObj as any).model || (config as any).llm?.model || 'default';
-
-    const hasEndpoint = typeof baseUrl === 'string' && baseUrl.trim() !== '';
-    const hasAuth = typeof apiKey === 'string' && apiKey.trim() !== '';
-    const isCompatible = activeProviderName === 'openai' || activeProviderName === 'openai-compatible' || activeProviderName === 'anthropic' || activeProviderName === 'google';
-    const canInitializeProvider = hasAuth || (hasEndpoint && isCompatible);
-
-    if (canInitializeProvider) {
-      let providerInstance: ILLMProvider;
-      
-      // Determine adapter via compatibility backend selection
-      if (activeProviderName === 'openai' || activeProviderName === 'anthropic' || activeProviderName === 'google' || activeProviderName === 'openai-compatible') {
-         // Using ProviderFactory instead of tightly coupling to OpenAICompatibleProvider class
-         providerInstance = ProviderFactory.createOpenAI({
-            baseUrl: baseUrl || '',
-            apiKey: apiKey || '',
-            model: model,
-         });
-      } else {
-         // Default fallback to OpenAI adapter for generic string matches
-         providerInstance = ProviderFactory.createOpenAI({
-            baseUrl: baseUrl || '',
-            apiKey: apiKey || '',
-            model: model,
-         });
-      }
-
-      // Explicitly register the requested configuration provider.
-      // This immediately removes the "unconfigured-fallback" if it was set
-      // by the prior logic.
-      llmRouter.registerProvider(providerInstance, true);
-    } else if (!options.allowUnconfiguredLLM) {
-       persistence.close();
-       const err = new Error(
-         'LLM configuration is required. Please run `fuckclaw setup` or set FUCKCLAW_LLM_API_KEY.'
-       ) as any;
-       err.code = 'CONFIGURATION_ERROR';
-       throw err;
+    const configured = await registerConfiguredProvider(config, llmRouter, environment);
+    if (!configured && !options.allowUnconfiguredLLM) {
+      persistence.close();
+      const err = new Error(
+        'LLM configuration is required. Please run `fuckclaw setup` or set a compatible base URL/model and API key where required.'
+      ) as any;
+      err.code = 'CONFIGURATION_ERROR';
+      throw err;
     }
   }
 
@@ -280,6 +306,7 @@ export async function createFuckClawRuntime(
     eventBus,
     workspace,
     toolRuntime,
+    llmRouter,
     kernel,
     planner,
     scheduler,

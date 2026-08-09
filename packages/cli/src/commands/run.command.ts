@@ -24,9 +24,30 @@ export async function executeRunCommand(runtime: FuckClawRuntimeInstance, goal: 
     console.log(`${ANSI.cyan}Executing plan...${ANSI.reset}`);
     const planResult = await runtime.planner.executePlan(plan);
 
-    console.log(`\n${ANSI.bold}${ANSI.green}Plan Execution Completed!${ANSI.reset}`);
-    console.log(`Output: ${planResult.output}`);
-    console.log(`Completed Steps: ${planResult.completedSteps} / ${planResult.totalSteps}`);
+    const hasOutput = planResult.output && planResult.output.trim().length > 0;
+    const allStepsCompleted = planResult.completedSteps === planResult.totalSteps;
+
+    if (hasOutput && allStepsCompleted) {
+      console.log(`\n${ANSI.bold}${ANSI.green}Plan Execution Completed!${ANSI.reset}`);
+      StreamRenderer.renderFinalResponse(planResult.output);
+      console.log(`Completed Steps: ${planResult.completedSteps} / ${planResult.totalSteps}`);
+    } else if (hasOutput && !allStepsCompleted) {
+      console.log(`\n${ANSI.bold}${ANSI.yellow}Plan Partially Completed${ANSI.reset}`);
+      StreamRenderer.renderFinalResponse(planResult.output);
+      console.log(`Completed Steps: ${planResult.completedSteps} / ${planResult.totalSteps}`);
+      StreamRenderer.renderWarning(
+        `Only ${planResult.completedSteps} of ${planResult.totalSteps} steps completed.`
+      );
+    } else if (!hasOutput && allStepsCompleted) {
+      StreamRenderer.renderWarning(
+        `Plan executed all ${planResult.totalSteps} steps but produced no user-visible output. ` +
+        `This may indicate a configuration or provider issue.`
+      );
+    } else {
+      StreamRenderer.renderError(
+        `Plan execution failed: ${planResult.completedSteps}/${planResult.totalSteps} steps completed with no output.`
+      );
+    }
   } catch (err: unknown) {
     StreamRenderer.renderError((err as Error).message || String(err));
   }

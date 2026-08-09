@@ -194,4 +194,76 @@ dailyLimitUsd = 100.0
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  it('should throw when global config file exists but is malformed TOML', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fc-malformed-'));
+    const configPath = path.join(tmpDir, 'bad.toml');
+    fs.writeFileSync(configPath, '[[[[malformed toml!!!!', 'utf8');
+
+    expect(() => new ConfigManager({ globalConfigPath: configPath, projectConfigPath: '/dev/null' }))
+      .toThrow(/Malformed TOML/);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('should load normally when global config file does not exist (first-run)', () => {
+    const cm = new ConfigManager({ globalConfigPath: '/tmp/nonexistent-fc-test.toml', projectConfigPath: '/dev/null' });
+    const cfg = cm.get();
+    expect(cfg.system.logLevel).toBe('info');
+  });
+
+  it('should persist API key to encrypted keystore when update() sets an apiKey path', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fc-keystore-'));
+    const configPath = path.join(tmpDir, 'fuckclaw.toml');
+    const keystorePath = path.join(tmpDir, 'env.json.enc');
+
+    const cm = new ConfigManager({ globalConfigPath: configPath, projectConfigPath: '/dev/null' });
+    await cm.update('providers.openai.apiKey', 'sk-test-secret-key-12345');
+
+    // 1. Config file must NOT contain the plaintext key
+    const tomlContent = fs.readFileSync(configPath, 'utf8');
+    expect(tomlContent).not.toContain('sk-test-secret-key-12345');
+
+    // 2. Keystore file must exist
+    expect(fs.existsSync(keystorePath)).toBe(true);
+
+    // 3. A fresh Keystore must be able to recover the secret
+    const ks = new Keystore(keystorePath);
+    const recovered = await ks.getSecret('providers.openai.apiKey');
+    expect(recovered).toBe('sk-test-secret-key-12345');
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('should survive cold-process config reload with keystore secret recovery', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fc-cold-'));
+    const configPath = path.join(tmpDir, 'fuckclaw.toml');
+    const keystorePath = path.join(tmpDir, 'env.json.enc');
+
+    // Phase 1: Write config and secret
+    const cm1 = new ConfigManager({ globalConfigPath: configPath, projectConfigPath: '/dev/null' });
+    await cm1.update('llm.provider', 'openai');
+    await cm1.update('llm.baseUrl', 'http://localhost:20128/v1');
+    await cm1.update('llm.model', 'test-model');
+    await cm1.update('providers.openai.apiKey', 'sk-cold-process-test');
+    await cm1.update('providers.openai.baseUrl', 'http://localhost:20128/v1');
+    await cm1.update('providers.openai.model', 'test-model');
+
+    // Phase 2: Fresh ConfigManager (simulating cold process restart)
+    const cm2 = new ConfigManager({ globalConfigPath: configPath, projectConfigPath: '/dev/null' });
+    expect(cm2.get().llm?.provider).toBe('openai');
+    expect(cm2.get().llm?.model).toBe('test-model');
+    expect(cm2.get().providers?.openai?.baseUrl).toBe('http://localhost:20128/v1');
+
+    // Phase 3: Verify secret is recoverable from keystore
+    const ks = new Keystore(keystorePath);
+    const secret = await ks.getSecret('providers.openai.apiKey');
+    expect(secret).toBe('sk-cold-process-test');
+
+    // Phase 4: Verify TOML never contained the secret
+    const toml = fs.readFileSync(configPath, 'utf8');
+    expect(toml).not.toContain('sk-cold-process-test');
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

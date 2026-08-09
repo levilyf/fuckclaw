@@ -9,20 +9,29 @@ export function loadConfigFile(filePath: string): Record<string, unknown> {
   if (!existsSync(filePath)) {
     return {};
   }
+
+  let raw: string;
   try {
-    const raw = readFileSync(filePath, 'utf-8');
-    if (filePath.endsWith('.json')) {
-      return JSON.parse(raw) as Record<string, unknown>;
-    }
-    // Default to TOML or try JSON fallback
+    raw = readFileSync(filePath, 'utf-8');
+  } catch (err: any) {
+    throw new Error(`Configuration file exists but is unreadable: ${filePath}: ${err.message}`);
+  }
+
+  if (filePath.endsWith('.json')) {
     try {
-      const parsed = parseToml(raw);
-      return parsed as Record<string, unknown>;
-    } catch (e: any) {
-      console.error(`TOML Parse Error in ${filePath}:`, e);
       return JSON.parse(raw) as Record<string, unknown>;
+    } catch (err: any) {
+      throw new Error(`Malformed JSON configuration file: ${filePath}: ${err.message}`);
     }
-  } catch {
-    return {};
+  }
+
+  try {
+    return parseToml(raw) as Record<string, unknown>;
+  } catch (tomlErr: any) {
+    try {
+      return JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      throw new Error(`Malformed TOML configuration file: ${filePath}: ${tomlErr.message}`);
+    }
   }
 }

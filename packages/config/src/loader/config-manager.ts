@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { loadProfile } from './profile.loader.js';
 import { loadConfigFile } from './file.loader.js';
+import { Keystore } from '../secrets/keystore.js';
 import {
   GlobalConfig,
   GlobalConfigSchema,
@@ -57,17 +58,14 @@ export class ConfigManager implements IConfigManager {
     merged = this.deepMerge(merged, defaults);
 
     // 2. Global TOML (~/.fuckclaw/config/fuckclaw.toml)
-    const rawGlobalPath = options.globalConfigPath ?? path.join(os.homedir(), '.fuckclaw', 'config', 'fuckclaw.toml');
-    const globalPath = rawGlobalPath.startsWith('~/')
-      ? path.join(os.homedir(), rawGlobalPath.slice(2))
-      : path.resolve(rawGlobalPath);
+    const globalPath = this.resolveGlobalConfigPath(options);
 
     if (fs.existsSync(globalPath)) {
       try {
-        const parsed = loadConfigFile(globalPath); // Handles TOML robustly
+        const parsed = loadConfigFile(globalPath);
         merged = this.deepMerge(merged, parsed);
-      } catch (err) {
-        // Silently skip unparseable files or log in debug
+      } catch (err: any) {
+        throw new Error(`Configuration error while loading ${globalPath}: ${err.message}`);
       }
     }
 
@@ -95,7 +93,9 @@ export class ConfigManager implements IConfigManager {
           const parsed = loadConfigFile(p);
           merged = this.deepMerge(merged, parsed);
           break; // Stop at first valid project config
-        } catch (err) {}
+        } catch (err: any) {
+          throw new Error(`Configuration error while loading ${p}: ${err.message}`);
+        }
       }
     }
 
@@ -173,7 +173,11 @@ export class ConfigManager implements IConfigManager {
     
     // Save to the global config file
     try {
-      const globalConfigPath = this.options.globalConfigPath ?? path.join(os.homedir(), '.fuckclaw', 'config', 'fuckclaw.toml');
+      const globalConfigPath = this.resolveGlobalConfigPath(this.options);
+      if (keyPath.endsWith('.apiKey') && typeof value === 'string' && value.length > 0) {
+        const keystore = new Keystore(this.resolveKeystorePath(this.options));
+        await keystore.setSecret(keyPath, value);
+      }
       const dir = path.dirname(globalConfigPath);
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
@@ -181,13 +185,16 @@ export class ConfigManager implements IConfigManager {
       
       // Clone again to remove secrets before writing to TOML
       const safeConfig = JSON.parse(JSON.stringify(this.config));
-      // Scrub API keys
+      // Scrub API keys before plaintext TOML serialization.
+      if (safeConfig.llm && 'apiKey' in safeConfig.llm) {
+        delete safeConfig.llm.apiKey;
+      }
       if (safeConfig.providers) {
-         for (const key of Object.keys(safeConfig.providers)) {
-            if (safeConfig.providers[key] && 'apiKey' in safeConfig.providers[key]) {
-               delete safeConfig.providers[key].apiKey;
-            }
-         }
+        for (const key of Object.keys(safeConfig.providers)) {
+          if (safeConfig.providers[key] && 'apiKey' in safeConfig.providers[key]) {
+            delete safeConfig.providers[key].apiKey;
+          }
+        }
       }
       
       const tomlContent = stringify(safeConfig);
@@ -244,6 +251,28 @@ export class ConfigManager implements IConfigManager {
       }
     }
     return raw;
+  }
+
+  public getGlobalConfigPath(): string {
+    return this.resolveGlobalConfigPath(this.options);
+  }
+
+  public getKeystorePath(): string {
+    return this.resolveKeystorePath(this.options);
+  }
+
+  private resolveHome(options: ConfigManagerOptions): string {
+    return options.environment?.HOME || options.environment?.USERPROFILE || os.homedir();
+  }
+
+  private resolveGlobalConfigPath(options: ConfigManagerOptions): string {
+    const home = this.resolveHome(options);
+    const rawPath = options.globalConfigPath ?? path.join(home, '.fuckclaw', 'config', 'fuckclaw.toml');
+    return rawPath.startsWith('~/') ? path.join(home, rawPath.slice(2)) : path.resolve(rawPath);
+  }
+
+  private resolveKeystorePath(options: ConfigManagerOptions): string {
+    return path.join(path.dirname(this.resolveGlobalConfigPath(options)), 'env.json.enc');
   }
 
   private deepMerge(target: Record<string, any>, source: Record<string, any>): Record<string, any> {

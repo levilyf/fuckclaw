@@ -30,6 +30,10 @@ export class StreamRenderer {
     process.stdout.write(`\n${ANSI.cyan}${ANSI.bold}FuckClaw:${ANSI.reset}\n${content}\n\n`);
   }
 
+  public static renderWarning(message: string): void {
+    process.stdout.write(`\n${ANSI.yellow}${ANSI.bold}Warning:${ANSI.reset} ${ANSI.yellow}${message}${ANSI.reset}\n\n`);
+  }
+
   public static renderError(errMessage: string): void {
     process.stdout.write(`\n${ANSI.red}${ANSI.bold}Error:${ANSI.reset} ${ANSI.red}${errMessage}${ANSI.reset}\n\n`);
   }

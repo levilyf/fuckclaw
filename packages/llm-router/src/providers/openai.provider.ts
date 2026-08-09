@@ -23,8 +23,11 @@ interface OpenAIErrorBody {
 interface OpenAIChatCompletion {
   model?: string;
   choices?: Array<{
+    finish_reason?: string | null;
     message?: {
+      role?: string;
       content?: string | null;
+      tool_calls?: unknown[];
     };
   }>;
   usage?: OpenAIUsage;
@@ -36,8 +39,15 @@ interface OpenAIChatCompletion {
 interface OpenAIChatCompletionChunk {
   model?: string;
   choices?: Array<{
+    finish_reason?: string | null;
     delta?: {
-      content?: string;
+      role?: string;
+      content?: string | null;
+      tool_calls?: unknown[];
+    };
+    message?: {
+      content?: string | null;
+      tool_calls?: unknown[];
     };
   }>;
   usage?: OpenAIUsage;
@@ -83,43 +93,88 @@ export class OpenAICompatibleProvider implements ILLMProvider {
         }),
       });
     } catch (err: any) {
-      const e = new Error(`Provider connection failed to ${this.baseUrl}: ${err.message}`) as any;
-      e.code = 'PROVIDER_CONNECTION_ERROR';
-      throw e;
+      throw this.providerError(
+        'PROVIDER_CONNECTION_ERROR',
+        `Provider connection failed to ${this.baseUrl}: ${err.message}`,
+        undefined,
+        err
+      );
     }
 
     const body = await response.text();
 
     if (!response.ok) {
       const msg = this.extractError(body, `OpenAI-compatible provider returned HTTP ${response.status}`);
-      const e = new Error(`Provider connection failed to ${this.baseUrl}: ${msg}`) as any;
-      e.code = 'PROVIDER_REQUEST_ERROR';
-      throw e;
+      throw this.providerError(
+        'PROVIDER_REQUEST_ERROR',
+        `Provider request failed at ${this.baseUrl}: ${msg}`,
+        response.status
+      );
     }
 
-    const contentType = response.headers.get('content-type') ?? '';
-    const parsed = (contentType.includes('text/event-stream') || body.trimStart().startsWith('data:'))
-      ? this.parseEventStream(body, request.model ?? this.model)
-      : this.parseJsonCompletion(body, request.model ?? this.model);
-
+    const parsed = this.parseCompletionBody(body, request.model ?? this.model);
     parsed.latencyMs = Date.now() - start;
     return parsed;
+  }
+
+  private parseCompletionBody(body: string, requestedModel: string): GenerationResponse {
+    const trimmed = body.trim();
+    if (!trimmed) {
+      throw this.providerError('PROVIDER_EMPTY_RESPONSE', `Provider ${this.name} returned an empty response body`);
+    }
+
+    // Many local OpenAI-compatible routers return a normal JSON object with an
+    // erroneous event-stream content type, or append `data: [DONE]` after JSON.
+    // Prefer real body shape over headers.
+    if (trimmed.startsWith('{')) {
+      const json = this.extractFirstJsonObject(trimmed);
+      if (json) {
+        return this.parseJsonCompletion(json, requestedModel);
+      }
+    }
+
+    if (trimmed.startsWith('data:') || trimmed.includes('\ndata:')) {
+      return this.parseEventStream(trimmed, requestedModel);
+    }
+
+    // Last chance: some servers prepend harmless whitespace/text before JSON.
+    const json = this.extractFirstJsonObject(trimmed);
+    if (json) {
+      return this.parseJsonCompletion(json, requestedModel);
+    }
+
+    throw this.providerError(
+      'PROVIDER_RESPONSE_PARSE_ERROR',
+      `Failed to identify OpenAI-compatible response format from provider "${this.name}": ${body.slice(0, 200)}`
+    );
   }
 
   private parseJsonCompletion(body: string, requestedModel: string): GenerationResponse {
     let parsed: OpenAIChatCompletion;
     try {
       parsed = JSON.parse(body) as OpenAIChatCompletion;
-    } catch {
-      throw new Error(`Failed to parse response JSON from provider "${this.name}": ${body.slice(0, 200)}`);
+    } catch (err: any) {
+      throw this.providerError(
+        'PROVIDER_RESPONSE_PARSE_ERROR',
+        `Failed to parse response JSON from provider "${this.name}": ${body.slice(0, 200)}`,
+        undefined,
+        err
+      );
     }
 
     if (parsed.error?.message) {
-      throw new Error(parsed.error.message);
+      throw this.providerError('PROVIDER_REQUEST_ERROR', parsed.error.message);
     }
 
     const choice = parsed.choices?.[0];
     const content = choice?.message?.content ?? '';
+    if (!content && choice?.message?.tool_calls?.length) {
+      throw this.providerError(
+        'PROVIDER_TOOL_CALL_RESPONSE_UNSUPPORTED',
+        `Provider ${this.name} returned tool_calls with no assistant text; FuckClaw did not request provider-native tool calls for this request.`
+      );
+    }
+
     const usage = this.extractUsage(parsed.usage, content);
 
     return {
@@ -135,6 +190,8 @@ export class OpenAICompatibleProvider implements ILLMProvider {
     let content = '';
     let responseModel = requestedModel;
     let explicitUsage: OpenAIUsage | undefined;
+    let sawToolCallWithoutContent = false;
+    let parsedAnyChunk = false;
 
     for (const rawLine of lines) {
       const line = rawLine.trim();
@@ -143,31 +200,52 @@ export class OpenAICompatibleProvider implements ILLMProvider {
       }
 
       const payload = line.slice(5).trim();
-      if (payload === '[DONE]') {
-        break;
+      if (!payload || payload === '[DONE]') {
+        if (payload === '[DONE]') break;
+        continue;
       }
 
+      let chunk: OpenAIChatCompletionChunk;
       try {
-        const chunk = JSON.parse(payload) as OpenAIChatCompletionChunk;
-        if (chunk.error?.message) {
-          throw new Error(chunk.error.message);
-        }
-        if (chunk.model) {
-          responseModel = chunk.model;
-        }
-        if (chunk.usage) {
-          explicitUsage = chunk.usage;
-        }
-
-        const delta = chunk.choices?.[0]?.delta?.content;
-        if (delta) {
-          content += delta;
-        }
-      } catch (err: any) {
-        if (err.message && !err.message.includes('Unexpected token')) {
-          throw err;
-        }
+        chunk = JSON.parse(payload) as OpenAIChatCompletionChunk;
+      } catch {
+        // Ignore malformed keepalive chunks; valid data chunks must be JSON.
+        continue;
       }
+      parsedAnyChunk = true;
+
+      if (chunk.error?.message) {
+        throw this.providerError('PROVIDER_REQUEST_ERROR', chunk.error.message);
+      }
+      if (chunk.model) {
+        responseModel = chunk.model;
+      }
+      if (chunk.usage) {
+        explicitUsage = chunk.usage;
+      }
+
+      const choice = chunk.choices?.[0];
+      const deltaContent = choice?.delta?.content ?? '';
+      const messageContent = choice?.message?.content ?? '';
+      if (deltaContent) content += deltaContent;
+      if (messageContent) content += messageContent;
+      if (!deltaContent && !messageContent && (choice?.delta?.tool_calls?.length || choice?.message?.tool_calls?.length)) {
+        sawToolCallWithoutContent = true;
+      }
+    }
+
+    if (!parsedAnyChunk) {
+      throw this.providerError(
+        'PROVIDER_RESPONSE_PARSE_ERROR',
+        `Failed to parse any JSON chunks from OpenAI-compatible event-stream response from provider "${this.name}"`
+      );
+    }
+
+    if (!content && sawToolCallWithoutContent) {
+      throw this.providerError(
+        'PROVIDER_TOOL_CALL_RESPONSE_UNSUPPORTED',
+        `Provider ${this.name} returned streaming tool_calls with no assistant text; FuckClaw did not request provider-native tool calls for this request.`
+      );
     }
 
     return {
@@ -176,6 +254,42 @@ export class OpenAICompatibleProvider implements ILLMProvider {
       model: responseModel,
       usage: this.extractUsage(explicitUsage, content),
     };
+  }
+
+  private extractFirstJsonObject(input: string): string | null {
+    const start = input.indexOf('{');
+    if (start === -1) return null;
+
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let i = start; i < input.length; i++) {
+      const ch = input[i];
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (ch === '\\') {
+          escaped = true;
+        } else if (ch === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (ch === '"') {
+        inString = true;
+      } else if (ch === '{') {
+        depth++;
+      } else if (ch === '}') {
+        depth--;
+        if (depth === 0) {
+          return input.slice(start, i + 1);
+        }
+      }
+    }
+
+    return null;
   }
 
   private extractUsage(usage: OpenAIUsage | undefined, content: string): GenerationResponse['usage'] {
@@ -199,11 +313,24 @@ export class OpenAICompatibleProvider implements ILLMProvider {
   }
 
   private extractError(body: string, defaultMessage: string): string {
-    try {
-      const parsed = JSON.parse(body) as OpenAIErrorBody;
-      return parsed.error?.message ?? defaultMessage;
-    } catch {
-      return body.trim() || defaultMessage;
+    const json = this.extractFirstJsonObject(body.trim());
+    if (json) {
+      try {
+        const parsed = JSON.parse(json) as OpenAIErrorBody;
+        return parsed.error?.message ?? defaultMessage;
+      } catch {}
     }
+    return body.trim() || defaultMessage;
+  }
+
+  private providerError(code: string, message: string, httpStatus?: number, cause?: unknown): Error {
+    const err = new Error(message) as any;
+    err.code = code;
+    err.provider = this.name;
+    err.model = this.model;
+    err.endpoint = this.baseUrl;
+    if (httpStatus !== undefined) err.httpStatus = httpStatus;
+    if (cause !== undefined) err.cause = cause;
+    return err;
   }
 }

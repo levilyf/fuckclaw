@@ -1,9 +1,10 @@
 import readline from 'node:readline';
-import { FuckClawRuntimeInstance } from '../index.js';
+import { FuckClawRuntimeInstance, registerConfiguredProvider } from '../index.js';
 import { renderBanner, ANSI } from './banner.js';
 import { renderStatusBar } from './status-bar.js';
 import { StreamRenderer } from './stream-renderer.js';
 import { executeStatusCommand } from '../commands/status.command.js';
+import { renderTaskResult } from '../commands/ask.command.js';
 import { select, isCancel, text, note } from '@clack/prompts';
 
 export class InteractiveTUI {
@@ -88,11 +89,7 @@ export class InteractiveTUI {
           source: { type: 'user' },
         });
 
-        if (task.output) {
-          StreamRenderer.renderFinalResponse(task.output);
-        } else if (task.error) {
-          StreamRenderer.renderError(task.error.message);
-        }
+        renderTaskResult(task);
       } catch (err: unknown) {
         StreamRenderer.renderError((err as Error).message || String(err));
       }
@@ -272,11 +269,7 @@ Workspace       ${rt.config.get().workspace?.root || '~/.fuckclaw'}
         source: { type: 'user' },
       });
 
-      if (task.output) {
-        StreamRenderer.renderFinalResponse(task.output);
-      } else if (task.error) {
-        StreamRenderer.renderError(task.error.message);
-      }
+      renderTaskResult(task);
     } catch (err: unknown) {
       StreamRenderer.renderError((err as Error).message || String(err));
     }
@@ -445,7 +438,14 @@ Workspace       ${rt.config.get().workspace?.root || '~/.fuckclaw'}
       await this.runtime.config.update(`providers.${p}.model`, model);
       await this.runtime.config.update('llm.provider', p);
       await this.runtime.config.update('llm.model', model);
-      note(`Configuration updated securely in keystore for ${p}.`, 'Success');
+
+      // Rebind the live provider immediately so the next task uses the new config
+      const rebound = await registerConfiguredProvider(this.runtime.config, this.runtime.llmRouter, process.env);
+      if (rebound) {
+        note(`Provider ${p} configured and activated. Next task will use it immediately.`, 'Provider Rebound');
+      } else {
+        note(`Configuration saved but could not activate provider ${p} — check credentials/endpoint.`, 'Warning');
+      }
     } catch (err: any) {
       StreamRenderer.renderError(`Failed to update config: ${err.message}`);
     }
