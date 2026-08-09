@@ -38,7 +38,11 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
+    "@clack/prompts": "^1.7.0",
     "@types/node": "^20.0.0",
+    "clack": "^0.1.0",
+    "ink": "^7.1.1",
+    "react": "^19.2.8",
     "typescript": "^5.4.0",
     "vitest": "^1.4.0"
   },

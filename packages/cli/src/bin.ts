@@ -10,6 +10,7 @@ import {
   executeConfigCommand,
   InteractiveTUI,
 } from './index.js';
+import { runOnboardingWizard } from './tui/onboarding.js';
 import { ANSI } from './tui/banner.js';
 
 const args = process.argv.slice(2);
@@ -19,8 +20,29 @@ const subArgs = args.slice(1);
 async function main() {
   if (!command || command === 'tui' || command === 'interactive') {
     const runtime = await createFuckClawRuntime({}, undefined, process.env, { allowUnconfiguredLLM: true });
+    
+    // First run detection
+    const p = runtime.config.get().llm?.provider || 'anthropic';
+    const configProviders = runtime.config.get().providers || {};
+    const legacyApiKey = runtime.config.get().llm?.apiKey;
+    const providerApiKey = configProviders[p]?.apiKey;
+    
+    if (!legacyApiKey && !providerApiKey) {
+      console.log(`${ANSI.cyan}FuckClaw is not configured yet. Let's get you running.${ANSI.reset}\n`);
+      await runOnboardingWizard(runtime);
+      // Wait a moment and then start the console after setup finishes successfully.
+      console.clear();
+    }
+    
+    // Auto-launch the top-level console operator menu, not just the chat TUI
     const tui = new InteractiveTUI(runtime);
-    await tui.start();
+    
+    // Check if we are running in full non-chat interactive mode
+    if (command === 'tui' || command === 'interactive' || !command) {
+      await (tui as any).showOperatorMenu();
+    } else {
+      await tui.start();
+    }
     return;
   }
 
@@ -39,7 +61,8 @@ ${ANSI.bold}Commands:${ANSI.reset}
   ${ANSI.cyan}mcp [list|add] [args...]${ANSI.reset}         Inspect or connect Model Context Protocol servers
   ${ANSI.cyan}plugins [list]${ANSI.reset}                   Inspect installed and active dynamic plugins
   ${ANSI.cyan}config [key] [val]${ANSI.reset}               Inspect or modify configuration values
-  ${ANSI.cyan}tui${ANSI.reset}                              Launch full interactive terminal interface
+  ${ANSI.cyan}tui${ANSI.reset}                              Launch interactive top-level operator console
+  ${ANSI.cyan}setup${ANSI.reset}                            Run the interactive onboarding wizard
   ${ANSI.cyan}--help, -h${ANSI.reset}                       Show this help message
 `);
     process.exit(0);
@@ -49,6 +72,10 @@ ${ANSI.bold}Commands:${ANSI.reset}
 
   try {
     switch (command) {
+      case 'setup':
+        await runOnboardingWizard(runtime);
+        break;
+
       case 'ask':
         await executeAskCommand(runtime, subArgs.join(' '));
         break;

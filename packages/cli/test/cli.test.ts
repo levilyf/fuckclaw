@@ -39,7 +39,7 @@ describe('CLI Runtime Integration', () => {
       { workspace: { root: fs.mkdtempSync(path.join(os.tmpdir(), 'fuckclaw-cli-config-test-')) } },
       undefined,
       {}
-    )).rejects.toThrow('OpenAI-compatible LLM configuration is required');
+    )).rejects.toThrow('LLM configuration is required');
   });
 
   it('should run a complete task through Kernel, ReasoningEngine, and ToolRuntime', async () => {

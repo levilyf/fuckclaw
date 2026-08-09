@@ -22,13 +22,8 @@ import os from 'node:os';
 
 export * from './client/api-client.js';
 export * from './client/fuckclaw-client.js';
-export * from './tui/App.js';
-export * from './tui/banner.js';
-export * from './tui/status-bar.js';
-export * from './tui/stream-renderer.js';
 export * from './tui/app.js';
-export * from './tui/components/index.js';
-export * from './tui/hooks/index.js';
+export * from './tui/onboarding.js';
 export * from './commands/ask.command.js';
 export * from './commands/run.command.js';
 export * from './commands/status.command.js';
@@ -69,6 +64,8 @@ export async function createFuckClawRuntime(
   options: CreateRuntimeOptions = {}
 ): Promise<FuckClawRuntimeInstance> {
   const environmentConfig = ConfigManager.fromEnvironment(environment).get();
+  
+  // Resolve workspace directory
   const rawRoot = customConfig.workspace?.root ?? environmentConfig.workspace?.root ?? '~/.fuckclaw';
   const resolvedRoot = rawRoot.startsWith('~/')
     ? path.join(os.homedir(), rawRoot.slice(2))
@@ -97,17 +94,29 @@ export async function createFuckClawRuntime(
   toolRuntime.register(new GitTool());
   toolRuntime.register(new DockerTool());
 
+  // Register Providers
   const llmRouter = new LLMRouter(logger, eventBus);
   if (customLLMProvider) {
     llmRouter.registerProvider(customLLMProvider, true);
   } else {
-    const llm = config.get().llm;
-    if (llm && llm.baseUrl && llm.apiKey) {
+    // Determine configured LLM state
+    const configLlms: any = config.get().providers || {};
+    const legacyLlm: any = config.get().llm || {};
+    
+    // We check both the structured providers object and the legacy llm object
+    const activeProviderName = legacyLlm.provider || 'anthropic';
+    const activeProviderConfig = configLlms[activeProviderName] || {};
+    
+    const apiKey = activeProviderConfig.apiKey || legacyLlm.apiKey;
+    const model = activeProviderConfig.model || legacyLlm.model || 'default';
+    const baseUrl = activeProviderConfig.baseUrl || legacyLlm.baseUrl;
+
+    if (apiKey) {
       llmRouter.registerProvider(
         new OpenAICompatibleProvider({
-          baseUrl: llm.baseUrl,
-          apiKey: llm.apiKey,
-          model: llm.model,
+          baseUrl: baseUrl,
+          apiKey: apiKey,
+          model: model,
         }),
         true
       );
@@ -117,7 +126,7 @@ export async function createFuckClawRuntime(
           name: 'unconfigured-fallback',
           generate: async () => {
             throw new Error(
-              'No LLM provider configured. Please set FUCKCLAW_LLM_BASE_URL, FUCKCLAW_LLM_API_KEY, and FUCKCLAW_LLM_MODEL or update ~/.fuckclaw/config/fuckclaw.toml.'
+              'No LLM provider configured. Please run `fuckclaw setup` or set API keys in your environment.'
             );
           },
         },
@@ -126,7 +135,7 @@ export async function createFuckClawRuntime(
     } else {
       persistence.close();
       throw new Error(
-        'OpenAI-compatible LLM configuration is required. Set FUCKCLAW_LLM_BASE_URL, FUCKCLAW_LLM_API_KEY, and FUCKCLAW_LLM_MODEL.'
+        'LLM configuration is required. Please run `fuckclaw setup` or set FUCKCLAW_LLM_API_KEY.'
       );
     }
   }
