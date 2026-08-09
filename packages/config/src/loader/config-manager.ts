@@ -1,8 +1,9 @@
-import { parse as parseToml } from 'smol-toml';
+import { stringify } from 'smol-toml';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { loadProfile } from './profile.loader.js';
+import { loadConfigFile } from './file.loader.js';
 import {
   GlobalConfig,
   GlobalConfigSchema,
@@ -63,8 +64,7 @@ export class ConfigManager implements IConfigManager {
 
     if (fs.existsSync(globalPath)) {
       try {
-        const fileContent = fs.readFileSync(globalPath, 'utf8');
-        const parsed = parseToml(fileContent);
+        const parsed = loadConfigFile(globalPath); // Handles TOML robustly
         merged = this.deepMerge(merged, parsed);
       } catch (err) {
         // Silently skip unparseable files or log in debug
@@ -87,28 +87,30 @@ export class ConfigManager implements IConfigManager {
       ? [options.projectConfigPath]
       : [path.join(cwd, 'fuckclaw.toml'), path.join(cwd, '.fuckclaw.toml')];
 
-    for (const projPath of projectCandidates) {
-      if (fs.existsSync(projPath)) {
+    for (const cand of projectCandidates) {
+      if (cand === '/dev/null') continue;
+      const p = cand.startsWith('~/') ? path.join(os.homedir(), cand.slice(2)) : path.resolve(cand);
+      if (fs.existsSync(p)) {
         try {
-          const fileContent = fs.readFileSync(projPath, 'utf8');
-          const parsed = parseToml(fileContent);
+          const parsed = loadConfigFile(p);
           merged = this.deepMerge(merged, parsed);
-          break;
-        } catch (err) {
-          // Skip invalid candidate
-        }
+          break; // Stop at first valid project config
+        } catch (err) {}
       }
     }
 
     // 4. Environment Variables (§19.2)
     const envOverrides: Record<string, any> = {};
     if (env.FUCKCLAW_WORKSPACE_ROOT) {
-      envOverrides.workspace = { ...envOverrides.workspace, root: env.FUCKCLAW_WORKSPACE_ROOT };
+      envOverrides.workspace = envOverrides.workspace || {};
+      envOverrides.workspace.root = env.FUCKCLAW_WORKSPACE_ROOT;
     }
     if (env.FUCKCLAW_LOG_LEVEL) {
       const level = env.FUCKCLAW_LOG_LEVEL.toLowerCase();
-      envOverrides.system = { ...envOverrides.system, logLevel: level };
-      envOverrides.logging = { ...envOverrides.logging, level };
+      envOverrides.system = envOverrides.system || {};
+      envOverrides.system.logLevel = level;
+      envOverrides.logging = envOverrides.logging || {};
+      envOverrides.logging.level = level;
     }
     if (env.FUCKCLAW_LLM_BASE_URL || env.FUCKCLAW_LLM_API_KEY || env.FUCKCLAW_LLM_MODEL) {
       envOverrides.llm = {
@@ -126,10 +128,12 @@ export class ConfigManager implements IConfigManager {
     }
 
     // Synchronize logging.level with system.logLevel
-    if (merged.system?.logLevel && (!merged.logging || merged.logging.level !== merged.system.logLevel)) {
-      merged.logging = { ...merged.logging, level: merged.system.logLevel };
-    } else if (merged.logging?.level && (!merged.system || merged.system.logLevel !== merged.logging.level)) {
-      merged.system = { ...merged.system, logLevel: merged.logging.level };
+    if (merged.system?.logLevel) {
+      merged.logging = merged.logging || {};
+      merged.logging.level = merged.system.logLevel;
+    } else if (merged.logging?.level) {
+      merged.system = merged.system || {};
+      merged.system.logLevel = merged.logging.level;
     }
 
     return GlobalConfigSchema.parse(merged);
@@ -166,6 +170,33 @@ export class ConfigManager implements IConfigManager {
     target[parts[parts.length - 1]!] = value;
 
     this.config = GlobalConfigSchema.parse(cloned);
+    
+    // Save to the global config file
+    try {
+      const globalConfigPath = this.options.globalConfigPath ?? path.join(os.homedir(), '.fuckclaw', 'config', 'fuckclaw.toml');
+      const dir = path.dirname(globalConfigPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      
+      // Clone again to remove secrets before writing to TOML
+      const safeConfig = JSON.parse(JSON.stringify(this.config));
+      // Scrub API keys
+      if (safeConfig.providers) {
+         for (const key of Object.keys(safeConfig.providers)) {
+            if (safeConfig.providers[key] && 'apiKey' in safeConfig.providers[key]) {
+               delete safeConfig.providers[key].apiKey;
+            }
+         }
+      }
+      
+      const tomlContent = stringify(safeConfig);
+      fs.writeFileSync(globalConfigPath, tomlContent, 'utf-8');
+      
+      // Keystore handles actual secrets persistence externally.
+    } catch (e: any) {
+       throw new Error(`Failed to write configuration file: ${e.message}`);
+    }
 
     // Notify listeners for this keyPath
     const pathListeners = this.listeners.get(keyPath);

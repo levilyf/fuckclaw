@@ -3,10 +3,41 @@ import { ConfigManager, Keystore, loadConfigFile, loadProfile } from '../src/ind
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { parse as parseToml } from 'smol-toml';
 
 describe('ConfigManager RFC 19 Compliance', () => {
+  it('should write to the global config file when update() is called', async () => {
+    const tmpDir = path.join(os.tmpdir(), `fuckclaw-toml-write-test-${Date.now()}`);
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const tomlPath = path.join(tmpDir, 'fuckclaw.toml');
+
+    const configManager = new ConfigManager({
+      globalConfigPath: tomlPath,
+    });
+
+    await configManager.update('system.logLevel', 'debug');
+    await configManager.update('providers.openai.baseUrl', 'http://localhost:11434');
+    await configManager.update('providers.openai.apiKey', 'secret-key-that-should-be-scrubbed');
+    
+    // Verify file exists
+    expect(fs.existsSync(tomlPath)).toBe(true);
+    
+    const rawContent = fs.readFileSync(tomlPath, 'utf8');
+    const parsed = parseToml(rawContent) as any;
+    
+    // Verify properties
+    expect(parsed.system?.logLevel).toBe('debug');
+    expect(parsed.providers?.openai?.baseUrl).toBe('http://localhost:11434');
+    
+    // Verify secrets are NOT written to disk
+    expect(parsed.providers?.openai?.apiKey).toBeUndefined();
+    
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
   it('should initialize with complete canonical default configuration', () => {
-    const config = new ConfigManager().get();
+    // Avoid picking up global ~/.fuckclaw state which might pollute test
+    const config = new ConfigManager({ globalConfigPath: '/dev/null' }).get();
     expect(config.workspace.root).toBe('~/.fuckclaw');
     expect(config.system.logLevel).toBe('info');
     expect(config.system.maxConcurrentTasks).toBe(4);

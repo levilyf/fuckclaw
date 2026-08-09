@@ -135,9 +135,9 @@ export async function createFuckClawRuntime(
     // Explicitly check the deeply nested property if activeProviderConfig is missing it, because tests pass nested config
     const rawProviderConfig = (config.get() as any)?.providers?.[activeProviderName] || (config as any)?.providers?.[activeProviderName] || (config.get() as any)?.llm || (config as any)?.llm || {};
   
-    const apiKey = activeProviderConfig.apiKey || rawProviderConfig.apiKey || configLlmObj.apiKey || (config as any).llm?.apiKey || '';
-    const baseUrl = activeProviderConfig.baseUrl || rawProviderConfig.baseUrl || configLlmObj.baseUrl || (config as any).llm?.baseUrl || '';
-    const model = activeProviderConfig.model || rawProviderConfig.model || configLlmObj.model || (config as any).llm?.model || 'default';
+    const apiKey = (activeProviderConfig as any).apiKey || (rawProviderConfig as any).apiKey || (configLlmObj as any).apiKey || (config as any).llm?.apiKey || '';
+    const baseUrl = (activeProviderConfig as any).baseUrl || (rawProviderConfig as any).baseUrl || (configLlmObj as any).baseUrl || (config as any).llm?.baseUrl || '';
+    const model = (activeProviderConfig as any).model || (rawProviderConfig as any).model || (configLlmObj as any).model || (config as any).llm?.model || 'default';
 
     const hasEndpoint = typeof baseUrl === 'string' && baseUrl.trim() !== '';
     const hasAuth = typeof apiKey === 'string' && apiKey.trim() !== '';

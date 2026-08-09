@@ -16,8 +16,10 @@ export function loadConfigFile(filePath: string): Record<string, unknown> {
     }
     // Default to TOML or try JSON fallback
     try {
-      return parseToml(raw) as Record<string, unknown>;
-    } catch {
+      const parsed = parseToml(raw);
+      return parsed as Record<string, unknown>;
+    } catch (e: any) {
+      console.error(`TOML Parse Error in ${filePath}:`, e);
       return JSON.parse(raw) as Record<string, unknown>;
     }
   } catch {

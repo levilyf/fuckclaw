@@ -175,9 +175,11 @@ export async function runOnboardingWizard(runtime: FuckClawRuntimeInstance): Pro
 
   try {
     if (p !== 'skip') {
-      await runtime.config.update(`providers.${p}.apiKey`, apiKey);
       await runtime.config.update(`providers.${p}.baseUrl`, baseUrl);
       await runtime.config.update(`providers.${p}.model`, model);
+      if (apiKey) {
+        await runtime.config.update(`providers.${p}.apiKey`, apiKey);
+      }
       
       await runtime.config.update('llm.provider', p);
       await runtime.config.update('llm.model', model);
