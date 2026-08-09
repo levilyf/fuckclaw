@@ -1,0 +1,37 @@
+id: terminal_operator_console
+name: Terminal Operator Console
+version: "1.0.0"
+description: Reusable skill wrapper to invoke the interactive terminal UI (TUI) and first-run setup wizard directly from the skills engine.
+origin: builtin
+tags: [tui, setup, interactive, console]
+
+triggerPatterns:
+  - "open the console"
+  - "run the terminal ui"
+  - "launch interactive tui"
+  - "open the operator console"
+  - "run setup"
+  - "interactive mode"
+
+inputs:
+  - name: mode
+    type: string
+    description: Which flow to launch (setup, tui, menu)
+    required: false
+    default: tui
+
+outputs:
+  - name: result_message
+    type: string
+    description: The final status message after the TUI exits
+
+requiredTools: [shell]
+
+steps:
+  - id: execute_cli_tui
+    action:
+      type: tool_call
+      tool: shell
+      argsTemplate:
+        command: "npx fuckclaw {{mode}}"
+    onFailure: abort
