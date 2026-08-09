@@ -32,7 +32,8 @@ export class InteractiveTUI {
         return;
       }
 
-      if (trimmed === '/exit' || trimmed === '/quit') {
+      const trimLine = trimmed;
+      if (trimLine === '/exit' || trimLine === '/quit') {
         this.stop();
         return;
       }
@@ -44,10 +45,20 @@ export class InteractiveTUI {
         return;
       }
 
-      if (trimmed === '/help') {
+      if (trimLine === '/setup') {
+        this.rl?.pause();
+        const { runOnboardingWizard } = await import('./onboarding.js');
+        await runOnboardingWizard(this.runtime);
+        this.rl?.resume();
+        this.rl?.prompt();
+        return;
+      }
+
+      if (trimLine === '/help') {
         console.log(`\n${ANSI.bold}Available Commands:${ANSI.reset}`);
         console.log(`  ${ANSI.cyan}/status${ANSI.reset}   - Display system overview and active tasks`);
         console.log(`  ${ANSI.cyan}/menu${ANSI.reset}     - Open the interactive operator console menu`);
+        console.log(`  ${ANSI.cyan}/setup${ANSI.reset}    - Run the configuration onboarding wizard`);
         console.log(`  ${ANSI.cyan}/clear${ANSI.reset}    - Clear the terminal screen`);
         console.log(`  ${ANSI.cyan}/exit${ANSI.reset}     - Exit interactive session`);
         console.log(`  <prompt>  - Execute natural language prompt or autonomous goal\n`);

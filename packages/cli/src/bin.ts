@@ -19,7 +19,7 @@ const subArgs = args.slice(1);
 
 async function main() {
   if (!command || command === 'tui' || command === 'interactive') {
-    const runtime = await createFuckClawRuntime({}, undefined, process.env, { allowUnconfiguredLLM: true });
+    const runtime = await createFuckClawRuntime({}, undefined, process.env, { allowUnconfiguredLLM: true, disableConsoleLogging: true });
     
     // First run detection
     const p = runtime.config.get().llm?.provider || 'anthropic';
@@ -68,7 +68,7 @@ ${ANSI.bold}Commands:${ANSI.reset}
     process.exit(0);
   }
 
-  const runtime = await createFuckClawRuntime({}, undefined, process.env, { allowUnconfiguredLLM: true });
+  const runtime = await createFuckClawRuntime({}, undefined, process.env, { allowUnconfiguredLLM: true, disableConsoleLogging: command === 'setup' || command === 'ask' });
 
   try {
     switch (command) {

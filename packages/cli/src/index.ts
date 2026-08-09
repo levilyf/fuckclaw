@@ -55,6 +55,7 @@ export interface FuckClawRuntimeInstance {
 
 export interface CreateRuntimeOptions {
   allowUnconfiguredLLM?: boolean;
+  disableConsoleLogging?: boolean;
 }
 
 export async function createFuckClawRuntime(
@@ -82,6 +83,15 @@ export async function createFuckClawRuntime(
         : {}),
   });
   const logger = new Logger(config);
+  
+  // Conditionally disable console logging for TUI/Interactive interfaces
+  if (options.disableConsoleLogging) {
+     logger.updateConfig({
+        system: { logLevel: 'error' },
+        logging: { level: 'error' }
+     } as any);
+  }
+
   const persistence = new PersistenceLayer(persistencePath, logger);
   const eventBus = new EventBus(persistence, logger);
   const workspace = new WorkspaceManager(config, logger);
@@ -179,6 +189,11 @@ export async function createFuckClawRuntime(
       const success = Boolean(evt.payload.success);
       const errorMsg = evt.payload.error ? String(evt.payload.error) : undefined;
       const output = evt.payload.output ? String(evt.payload.output) : '';
+
+      if (taskId && !output && errorMsg && (errorMsg.includes('unconfigured') || errorMsg.includes('No LLM provider'))) {
+        // Do not record configuration failures as agent anti-patterns
+        return;
+      }
 
       await selfImprovement.processTrace({
         taskId,

@@ -195,6 +195,8 @@ export async function runOnboardingWizard(runtime: FuckClawRuntimeInstance): Pro
     process.exit(1);
   }
 
+  let testSuccess = false;
+
   // 5. Test Task
   if (p !== 'skip') {
     const runTest = await confirm({
@@ -210,24 +212,78 @@ export async function runOnboardingWizard(runtime: FuckClawRuntimeInstance): Pro
     if (runTest) {
       s.start('Executing test task: "Identify the current operating system and user."');
       try {
+        // We must reinitialize the LLMRouter using the new configuration
+        // because the runtime instance passed to onboarding was instantiated
+        // with the OLD configuration (often "unconfigured-fallback").
+        const OpenAICompatibleProvider = (await import('@fuckclaw/llm-router')).OpenAICompatibleProvider;
+        const llmRouter = runtime.kernel.llmRouter;
+        llmRouter.registerProvider(
+          new OpenAICompatibleProvider({
+            baseUrl,
+            apiKey,
+            model,
+          }),
+          true // make default
+        );
+
         const task = await runtime.kernel.submitTask({
           description: 'Identify the current operating system and user using shell commands. Be concise.',
           source: { type: 'user' },
         });
-        s.stop(`Test Task Completed! Output: ${task.output}`);
+
+        if (task.output && task.state === 'completed') {
+          s.stop(`Test Task Completed! Output: ${task.output}`);
+          testSuccess = true;
+        } else {
+          throw new Error(task.error?.message || 'Task completed without output.');
+        }
       } catch (err: any) {
         s.stop(`Test Task Failed: ${err.message}`);
+        
+        note(
+          'The configuration was saved, but FuckClaw could not execute a test task.\n\n' +
+          `Reason:\n${err.message}\n\n` +
+          'Your configuration has NOT been marked as verified.',
+          '× Test task failed'
+        );
+
+        const nextAction = await select({
+          message: 'What would you like to do?',
+          options: [
+             { value: 'retry', label: 'Retry test task' },
+             { value: 'continue', label: 'Continue without testing (unverified setup)' },
+             { value: 'exit', label: 'Exit' }
+          ]
+        });
+
+        if (nextAction === 'exit' || isCancel(nextAction)) {
+          process.exit(1);
+        }
       }
+    } else {
+      note('You chose to skip the test task. Setup is unverified.', 'Unverified Setup');
     }
   }
 
-  note(
-    'FuckClaw is ready!\n\n' +
-    'Run `fuckclaw run "<task>"` for headless execution.\n' +
-    'Run `fuckclaw ask` to enter the interactive console.\n' +
-    'Run `fuckclaw serve` to boot the daemon and Web Dashboard.',
-    'Next Steps'
-  );
+  if (p === 'skip') {
+    note(
+      'FuckClaw has been initialized without an active LLM Provider.\n' +
+      'Capabilities will be severely limited until configured.',
+      'Limited Mode'
+    );
+  } else if (testSuccess) {
+    note(
+      'FuckClaw is ready!\n\n' +
+      'Run `fuckclaw run "<task>"` for headless execution.\n' +
+      'Run `fuckclaw ask` to enter the interactive console.\n' +
+      'Run `fuckclaw serve` to boot the daemon and Web Dashboard.',
+      'Next Steps'
+    );
+  }
 
-  outro('Setup complete. Welcome to FuckClaw.');
+  if (testSuccess) {
+    outro('Setup complete. Welcome to FuckClaw.');
+  } else if (p === 'skip' || !testSuccess) {
+    outro('Setup complete (Unverified).');
+  }
 }
