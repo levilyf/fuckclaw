@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
+import { ILLMProvider } from '@fuckclaw/llm-router';
+
 class MockProvider implements ILLMProvider {
   name = 'mock';
   async generate() { return { content: '', provider: 'mock', model: 'mock', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }}; }

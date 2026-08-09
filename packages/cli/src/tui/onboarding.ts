@@ -15,39 +15,136 @@ export async function runOnboardingWizard(runtime: FuckClawRuntimeInstance): Pro
     'Welcome'
   );
 
-  // 1. Choose Provider
-  const provider = await select({
-    message: 'Which LLM Provider would you like to use?',
+  // 1. Choose Compatibility Backend
+  const compatibility = await select({
+    message: 'Which API compatibility backend would you like to use?',
     options: [
-      { value: 'anthropic', label: 'Anthropic (Claude 3.5 Sonnet)' },
-      { value: 'google', label: 'Google (Gemini 1.5 Pro)' },
-      { value: 'openai', label: 'OpenAI (GPT-4o)' },
+      { value: 'openai', label: 'OpenAI Compatible (ChatGPT, vLLM, Ollama, local-ai)' },
+      { value: 'anthropic', label: 'Anthropic Compatible (Claude)' },
+      { value: 'google', label: 'Google Compatible (Gemini)' },
       { value: 'skip', label: 'Skip for now (some features will be disabled)' },
     ],
   });
-  if (isCancel(provider)) {
+  if (isCancel(compatibility)) {
     outro('Onboarding cancelled.');
     process.exit(0);
   }
 
-  const p = provider as string;
+  const p = compatibility as string;
+  let baseUrl = '';
   let apiKey = '';
+  let model = '';
 
   if (p !== 'skip') {
-    // 2. Get API Key
+    // 2. Base URL
+    let defaultBaseUrl = '';
+    if (p === 'openai') defaultBaseUrl = 'https://api.openai.com/v1';
+    if (p === 'anthropic') defaultBaseUrl = 'https://api.anthropic.com';
+    if (p === 'google') defaultBaseUrl = 'https://generativelanguage.googleapis.com';
+
+    const baseUrlResp = await text({
+      message: `Enter the Base URL for the ${p} compatible endpoint:`,
+      initialValue: defaultBaseUrl,
+      placeholder: defaultBaseUrl,
+    });
+    if (isCancel(baseUrlResp)) {
+      outro('Onboarding cancelled.');
+      process.exit(0);
+    }
+    baseUrl = baseUrlResp as string;
+
+    // 3. API Key
     const keyResp = await text({
-      message: `Enter your API key for ${p}:`,
+      message: `Enter your API key for the ${p} backend (leave blank if local/unauthenticated):`,
       placeholder: 'sk-...',
-      validate: (value) => {
-        if (!value || typeof value !== 'string' || !value.trim()) return 'API key is required to run the agent.';
-        return;
-      },
     });
     if (isCancel(keyResp)) {
       outro('Onboarding cancelled.');
       process.exit(0);
     }
     apiKey = keyResp as string;
+
+    // 4. Model Selection Flow
+    const modelSelectionMode = await select({
+      message: 'How would you like to select the model?',
+      options: [
+        { value: 'manual', label: 'Type the model name manually' },
+        { value: 'auto', label: 'Fetch available models from the endpoint' },
+      ],
+    });
+    if (isCancel(modelSelectionMode)) {
+      outro('Onboarding cancelled.');
+      process.exit(0);
+    }
+
+    if (modelSelectionMode === 'auto') {
+      const s = spinner();
+      s.start(`Fetching models from ${baseUrl}...`);
+      
+      try {
+        // Mock fetch or true fetch logic goes here.
+        // For CLI environment, we'll try to use the raw endpoint or fallback gracefully.
+        if (p === 'openai') {
+           const headers: Record<string, string> = {
+              'Content-Type': 'application/json'
+           };
+           if (apiKey.trim()) {
+              headers['Authorization'] = `Bearer ${apiKey}`;
+           }
+           const res = await fetch(`${baseUrl}/models`, { headers });
+           if (!res.ok) {
+             throw new Error(`HTTP Error ${res.status}: ${res.statusText}`);
+           }
+           const data = await res.json();
+           const models = data.data?.map((m: any) => ({ value: m.id, label: m.id })) || [];
+           s.stop(`Fetched ${models.length} models.`);
+           
+           if (models.length > 0) {
+             const selectedModel = await select({
+                message: 'Select a model:',
+                options: models.slice(0, 50), // cap to avoid UI overflow
+             });
+             if (isCancel(selectedModel)) {
+               outro('Onboarding cancelled.');
+               process.exit(0);
+             }
+             model = selectedModel as string;
+           } else {
+             note('No models returned from endpoint.', 'Model Discovery Failed');
+             model = await manualModelPrompt(p);
+           }
+        } else {
+          s.stop('Model discovery is not supported for this compatibility backend yet.');
+          note('This backend does not expose model listing.', 'Model Discovery Unavailable');
+          model = await manualModelPrompt(p);
+        }
+      } catch (err: any) {
+        s.stop(`Failed to fetch models: ${err.message}`);
+        note('Please verify the base URL and API key, or enter the model name manually.', 'Connection Failed');
+        model = await manualModelPrompt(p);
+      }
+    } else {
+      model = await manualModelPrompt(p);
+    }
+  }
+
+  async function manualModelPrompt(backend: string): Promise<string> {
+    let defaultModel = '';
+    if (backend === 'anthropic') defaultModel = 'claude-3-5-sonnet-20241022';
+    if (backend === 'google') defaultModel = 'gemini-1.5-pro';
+    if (backend === 'openai') defaultModel = 'gpt-4o';
+
+    const m = await text({
+      message: 'Enter the exact model name/ID:',
+      initialValue: defaultModel,
+      placeholder: defaultModel,
+      validate: (v) => !v || !v.trim() ? 'Model name is required' : undefined,
+    });
+    if (isCancel(m)) {
+      outro('Onboarding cancelled.');
+      process.exit(0);
+    }
+    return m as string;
   }
 
   // 3. Configure Workspace
@@ -79,16 +176,11 @@ export async function runOnboardingWizard(runtime: FuckClawRuntimeInstance): Pro
   try {
     if (p !== 'skip') {
       await runtime.config.update(`providers.${p}.apiKey`, apiKey);
+      await runtime.config.update(`providers.${p}.baseUrl`, baseUrl);
+      await runtime.config.update(`providers.${p}.model`, model);
       
-      // Set a sensible default model based on provider
-      let defaultModel = 'default';
-      if (p === 'anthropic') defaultModel = 'claude-3-5-sonnet-20241022';
-      if (p === 'google') defaultModel = 'gemini-1.5-pro';
-      if (p === 'openai') defaultModel = 'gpt-4o';
-      
-      await runtime.config.update(`providers.${p}.model`, defaultModel);
       await runtime.config.update('llm.provider', p);
-      await runtime.config.update('llm.model', defaultModel);
+      await runtime.config.update('llm.model', model);
     }
     
     await runtime.config.update('workspace.root', workspacePath);

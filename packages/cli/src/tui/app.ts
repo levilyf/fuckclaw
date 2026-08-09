@@ -204,20 +204,39 @@ export class InteractiveTUI {
     const rt = this.runtime;
     const llm = rt.config.get().llm;
     const providerStatus = llm?.provider ? `CONNECTED (${llm.provider})` : 'UNCONFIGURED';
-    const mcpCount = rt.mcpManager ? Array.from((rt.mcpManager as any).clientManager.clients.keys()).length : 0;
-    const pluginCount = rt.pluginManager ? Array.from((rt.pluginManager as any).plugins.keys()).length : 0;
+    
+    let mcpCount = 0;
+    try {
+      mcpCount = rt.mcpManager ? rt.mcpManager.listServers().length : 0;
+    } catch (err) {
+      mcpCount = 0;
+    }
+    
+    let pluginCount = 0;
+    try {
+      pluginCount = rt.pluginManager ? rt.pluginManager.list().length : 0;
+    } catch (err) {
+      pluginCount = 0;
+    }
+
+    let kernelState = 'UNAVAILABLE';
+    try {
+       kernelState = rt.kernel ? rt.kernel.getState().toUpperCase() : 'UNAVAILABLE';
+    } catch (err) {
+       kernelState = 'ERROR';
+    }
 
     const status = `
 ${ANSI.bold}System Health Overview${ANSI.reset}
 
-Kernel          ${rt.kernel.getState() === 'idle' || (rt.kernel.getState() as any) === 'executing' ? ANSI.green + 'READY' + ANSI.reset : ANSI.yellow + rt.kernel.getState().toUpperCase() + ANSI.reset}
+Kernel          ${kernelState === 'IDLE' || kernelState === 'EXECUTING' ? ANSI.green + 'READY' + ANSI.reset : ANSI.yellow + kernelState + ANSI.reset}
 Persistence     ${ANSI.green}CONNECTED${ANSI.reset}
 LLM Provider    ${llm?.provider ? ANSI.green + providerStatus + ANSI.reset : ANSI.red + providerStatus + ANSI.reset}
 Memory          ${rt.memory ? ANSI.green + 'READY' + ANSI.reset : ANSI.red + 'UNAVAILABLE' + ANSI.reset}
 Tool Runtime    ${rt.toolRuntime ? ANSI.green + 'READY' + ANSI.reset : ANSI.red + 'UNAVAILABLE' + ANSI.reset}
-Scheduler       ${rt.scheduler && (rt.scheduler as any).isRunning ? ANSI.green + 'RUNNING' + ANSI.reset : ANSI.yellow + 'STOPPED' + ANSI.reset}
-MCP             ${mcpCount > 0 ? ANSI.green + mcpCount + ' connections' + ANSI.reset : '0 connections'}
-Plugins         ${pluginCount > 0 ? ANSI.green + pluginCount + ' loaded' + ANSI.reset : '0 loaded'}
+Scheduler       ${rt.scheduler ? ANSI.green + 'RUNNING' + ANSI.reset : ANSI.yellow + 'STOPPED' + ANSI.reset}
+MCP             ${rt.mcpManager ? ANSI.green + mcpCount + ' connections' + ANSI.reset : ANSI.red + 'UNAVAILABLE' + ANSI.reset}
+Plugins         ${rt.pluginManager ? ANSI.green + pluginCount + ' loaded' + ANSI.reset : ANSI.red + 'UNAVAILABLE' + ANSI.reset}
 Workspace       ${rt.config.get().workspace?.root || '~/.fuckclaw'}
 `;
     console.log(status);
@@ -317,18 +336,19 @@ Workspace       ${rt.config.get().workspace?.root || '~/.fuckclaw'}
     }
 
     note(
-      `Active Provider: ${currentProvider}\n` +
+      `Active Compatibility Backend: ${currentProvider}\n` +
       `Active Model: ${pProviders[currentProvider]?.model || llm?.model || 'default'}\n` +
+      `Base URL: ${pProviders[currentProvider]?.baseUrl || 'default'}\n` +
       `API Key: ${maskedKey}`,
       'Current LLM Configuration'
     );
 
     const provider = await select({
-      message: 'Select a provider to configure:',
+      message: 'Select a compatibility backend to configure:',
       options: [
-        { value: 'anthropic', label: 'Anthropic' },
-        { value: 'google', label: 'Google Gemini' },
-        { value: 'openai', label: 'OpenAI' },
+        { value: 'openai', label: 'OpenAI Compatible (ChatGPT, vLLM, Ollama, local-ai)' },
+        { value: 'anthropic', label: 'Anthropic Compatible (Claude)' },
+        { value: 'google', label: 'Google Compatible (Gemini)' },
         { value: 'back', label: '🔙 Back' },
       ],
     });
@@ -337,28 +357,106 @@ Workspace       ${rt.config.get().workspace?.root || '~/.fuckclaw'}
 
     const p = provider as string;
 
+    let defaultBaseUrl = '';
+    if (p === 'openai') defaultBaseUrl = 'https://api.openai.com/v1';
+    if (p === 'anthropic') defaultBaseUrl = 'https://api.anthropic.com';
+    if (p === 'google') defaultBaseUrl = 'https://generativelanguage.googleapis.com';
+
+    const baseUrlResp = await text({
+      message: `Enter the Base URL for the ${p} compatible endpoint:`,
+      initialValue: defaultBaseUrl,
+      placeholder: defaultBaseUrl,
+    });
+    if (isCancel(baseUrlResp)) return;
+    const baseUrl = baseUrlResp as string;
+
     const apiKey = await text({
-      message: `Enter new API key for ${p}:`,
+      message: `Enter new API key for the ${p} backend (leave blank if local/unauthenticated):`,
       placeholder: 'sk-...',
     });
 
-    if (isCancel(apiKey) || typeof apiKey !== 'string' || !apiKey.trim()) return;
+    if (isCancel(apiKey)) return;
+    const key = apiKey as string;
 
-    let defaultModel = 'default';
-    if (p === 'anthropic') defaultModel = 'claude-3-5-sonnet-20241022';
-    if (p === 'google') defaultModel = 'gemini-1.5-pro';
-    if (p === 'openai') defaultModel = 'gpt-4o';
+    const modelSelectionMode = await select({
+      message: 'How would you like to select the model?',
+      options: [
+        { value: 'manual', label: 'Type the model name manually' },
+        { value: 'auto', label: 'Fetch available models from the endpoint' },
+      ],
+    });
+    
+    if (isCancel(modelSelectionMode)) return;
+
+    let model = '';
+    if (modelSelectionMode === 'auto') {
+      try {
+        if (p === 'openai') {
+           const headers: Record<string, string> = {
+              'Content-Type': 'application/json'
+           };
+           if (key.trim()) {
+              headers['Authorization'] = `Bearer ${key}`;
+           }
+           const res = await fetch(`${baseUrl}/models`, { headers });
+           if (!res.ok) {
+             throw new Error(`HTTP Error ${res.status}: ${res.statusText}`);
+           }
+           const data = await res.json();
+           const models = data.data?.map((m: any) => ({ value: m.id, label: m.id })) || [];
+           
+           if (models.length > 0) {
+             const selectedModel = await select({
+                message: 'Select a model:',
+                options: models.slice(0, 50),
+             });
+             if (isCancel(selectedModel)) return;
+             model = selectedModel as string;
+           } else {
+             note('No models returned from endpoint.', 'Model Discovery Failed');
+             model = await this.manualModelPrompt(p);
+           }
+        } else {
+          note('This backend does not expose model listing.', 'Model Discovery Unavailable');
+          model = await this.manualModelPrompt(p);
+        }
+      } catch (err: any) {
+        note(`Failed to fetch models: ${err.message}`, 'Connection Failed');
+        model = await this.manualModelPrompt(p);
+      }
+    } else {
+      model = await this.manualModelPrompt(p);
+    }
 
     try {
-      await this.runtime.config.update(`providers.${p}.apiKey`, apiKey);
-      await this.runtime.config.update(`providers.${p}.model`, defaultModel);
+      await this.runtime.config.update(`providers.${p}.apiKey`, key);
+      await this.runtime.config.update(`providers.${p}.baseUrl`, baseUrl);
+      await this.runtime.config.update(`providers.${p}.model`, model);
       await this.runtime.config.update('llm.provider', p);
-      await this.runtime.config.update('llm.model', defaultModel);
+      await this.runtime.config.update('llm.model', model);
       note(`Configuration updated securely in keystore for ${p}.`, 'Success');
     } catch (err: any) {
       StreamRenderer.renderError(`Failed to update config: ${err.message}`);
     }
     await this.pause();
+  }
+
+  private async manualModelPrompt(backend: string): Promise<string> {
+    let defaultModel = '';
+    if (backend === 'anthropic') defaultModel = 'claude-3-5-sonnet-20241022';
+    if (backend === 'google') defaultModel = 'gemini-1.5-pro';
+    if (backend === 'openai') defaultModel = 'gpt-4o';
+
+    const m = await text({
+      message: 'Enter the exact model name/ID:',
+      initialValue: defaultModel,
+      placeholder: defaultModel,
+      validate: (v) => !v || !v.trim() ? 'Model name is required' : undefined,
+    });
+    
+    // We handle cancellation higher up or return empty string if cancelled
+    if (isCancel(m)) return defaultModel;
+    return m as string;
   }
 
   private viewTools(): void {
@@ -570,17 +668,21 @@ Workspace       ${rt.config.get().workspace?.root || '~/.fuckclaw'}
       return;
     }
 
-    const plugins = Array.from((pm as any).plugins.values());
-    if (plugins.length === 0) {
-      note('No plugins are currently loaded.', 'Plugins');
-    } else {
-      let msg = '';
-      plugins.forEach((p: any) => {
-        msg += `• ${ANSI.bold}${p.metadata?.name || p.id}${ANSI.reset} (v${p.metadata?.version || 'unknown'})\n`;
-        msg += `  Status: ${p.status?.toUpperCase() || 'UNKNOWN'}\n`;
-        msg += `  Author: ${p.metadata?.author || 'Unknown'}\n\n`;
-      });
-      note(msg.trim(), `Loaded Plugins (${plugins.length})`);
+    try {
+      const plugins = pm.list();
+      if (plugins.length === 0) {
+        note('No plugins are currently loaded.', 'Plugins');
+      } else {
+        let msg = '';
+        plugins.forEach((p: any) => {
+          msg += `• ${ANSI.bold}${p.manifest?.name || p.manifest?.id}${ANSI.reset} (v${p.manifest?.version || 'unknown'})\n`;
+          msg += `  Status: ${p.status?.toUpperCase() || 'UNKNOWN'}\n`;
+          msg += `  Author: ${p.manifest?.author || 'Unknown'}\n\n`;
+        });
+        note(msg.trim(), `Loaded Plugins (${plugins.length})`);
+      }
+    } catch (err: any) {
+      note(`Failed to list plugins: ${err.message}`, 'Plugins Error');
     }
     await this.pause();
   }
@@ -593,19 +695,21 @@ Workspace       ${rt.config.get().workspace?.root || '~/.fuckclaw'}
       return;
     }
 
-    const clients = Array.from((mcp as any).clientManager.clients.entries());
-    if (clients.length === 0) {
-      note('No MCP servers are currently connected.', 'Model Context Protocol');
-    } else {
-      let msg = '';
-      clients.forEach((c: any) => {
-        const id = c[0];
-        const client = c[1];
-        msg += `• ${ANSI.bold}${id}${ANSI.reset}\n`;
-        msg += `  Transport: ${client.transport?.constructor?.name || 'Unknown'}\n`;
-        msg += `  Status: ${client.status || 'CONNECTED'}\n\n`;
-      });
-      note(msg.trim(), `Active MCP Connections (${clients.length})`);
+    try {
+      const servers = mcp.listServers();
+      if (servers.length === 0) {
+        note('No MCP servers are currently connected.', 'Model Context Protocol');
+      } else {
+        let msg = '';
+        servers.forEach((s: any) => {
+          msg += `• ${ANSI.bold}${s.id}${ANSI.reset} (${s.name || 'Unknown'})\n`;
+          msg += `  Transport: ${s.transportType || 'Unknown'}\n`;
+          msg += `  Status: ${s.status || 'CONNECTED'}\n\n`;
+        });
+        note(msg.trim(), `Active MCP Connections (${servers.length})`);
+      }
+    } catch (err: any) {
+      note(`Failed to list MCP connections: ${err.message}`, 'MCP Error');
     }
     await this.pause();
   }
