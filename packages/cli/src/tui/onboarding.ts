@@ -215,10 +215,12 @@ export async function runOnboardingWizard(runtime: FuckClawRuntimeInstance): Pro
         // We must reinitialize the LLMRouter using the new configuration
         // because the runtime instance passed to onboarding was instantiated
         // with the OLD configuration (often "unconfigured-fallback").
-        const OpenAICompatibleProvider = (await import('@fuckclaw/llm-router')).OpenAICompatibleProvider;
+        const { ProviderFactory } = await import('@fuckclaw/llm-router');
         const llmRouter = runtime.kernel.llmRouter;
+        
+        // Rebind using ProviderFactory generic interface instead of raw class
         llmRouter.registerProvider(
-          new OpenAICompatibleProvider({
+          ProviderFactory.createOpenAI({
             baseUrl,
             apiKey,
             model,

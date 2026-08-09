@@ -4,7 +4,7 @@ import { PersistenceLayer, IPersistenceLayer } from '@fuckclaw/persistence';
 import { EventBus, IEventBus } from '@fuckclaw/event-bus';
 import { WorkspaceManager, IWorkspaceManager } from '@fuckclaw/workspace';
 import { ToolRuntime, ShellTool, FilesystemTool, HttpTool, PythonTool, GitTool, DockerTool, IToolRuntime } from '@fuckclaw/tool-runtime';
-import { ILLMProvider, LLMRouter, OpenAICompatibleProvider } from '@fuckclaw/llm-router';
+import { ILLMProvider, LLMRouter, ProviderFactory } from '@fuckclaw/llm-router';
 import { MemorySystem, IMemorySystem } from '@fuckclaw/memory';
 import { KnowledgeGraph, IKnowledgeGraph } from '@fuckclaw/knowledge-graph';
 import { SkillsEngine, ISkillEngine } from '@fuckclaw/skills';
@@ -76,6 +76,7 @@ export async function createFuckClawRuntime(
   const config = new ConfigManager({
     workspace: customConfig.workspace ?? environmentConfig.workspace,
     logging: customConfig.logging ?? environmentConfig.logging,
+    providers: customConfig.providers ?? environmentConfig.providers,
     ...(customConfig.llm
       ? { llm: customConfig.llm }
       : environmentConfig.llm
@@ -85,11 +86,9 @@ export async function createFuckClawRuntime(
   const logger = new Logger(config);
   
   // Conditionally disable console logging for TUI/Interactive interfaces
+  // We use a private convention to override log level dynamically
   if (options.disableConsoleLogging) {
-     logger.updateConfig({
-        system: { logLevel: 'error' },
-        logging: { level: 'error' }
-     } as any);
+     (config as any)._interactiveOverrideLogLevel = 'error';
   }
 
   const persistence = new PersistenceLayer(persistencePath, logger);
@@ -106,47 +105,76 @@ export async function createFuckClawRuntime(
 
   // Register Providers
   const llmRouter = new LLMRouter(logger, eventBus);
+  
+  if (options.allowUnconfiguredLLM) {
+    llmRouter.registerProvider(
+      {
+        name: 'unconfigured-fallback',
+        generate: async () => {
+          const err = new Error(
+            'No LLM provider configured. Please run `fuckclaw setup` or set API keys in your environment.'
+          ) as any;
+          err.code = 'CONFIGURATION_ERROR';
+          throw err;
+        },
+      },
+      true
+    );
+  }
+
   if (customLLMProvider) {
     llmRouter.registerProvider(customLLMProvider, true);
   } else {
-    // Determine configured LLM state
-    const configLlms: any = config.get().providers || {};
-    const legacyLlm: any = config.get().llm || {};
-    
+    const configProvidersObj = config.get().providers || (config as any).providers || {};
+    const configLlmObj = config.get().llm || (config as any).llm || {};
+  
     // We check both the structured providers object and the legacy llm object
-    const activeProviderName = legacyLlm.provider || 'anthropic';
-    const activeProviderConfig = configLlms[activeProviderName] || {};
+    const activeProviderName = configLlmObj.provider || (config as any).llm?.provider || 'anthropic';
+    const activeProviderConfig = configProvidersObj[activeProviderName] || {};
     
-    const apiKey = activeProviderConfig.apiKey || legacyLlm.apiKey;
-    const model = activeProviderConfig.model || legacyLlm.model || 'default';
-    const baseUrl = activeProviderConfig.baseUrl || legacyLlm.baseUrl;
+    // Explicitly check the deeply nested property if activeProviderConfig is missing it, because tests pass nested config
+    const rawProviderConfig = (config.get() as any)?.providers?.[activeProviderName] || (config as any)?.providers?.[activeProviderName] || (config.get() as any)?.llm || (config as any)?.llm || {};
+  
+    const apiKey = activeProviderConfig.apiKey || rawProviderConfig.apiKey || configLlmObj.apiKey || (config as any).llm?.apiKey || '';
+    const baseUrl = activeProviderConfig.baseUrl || rawProviderConfig.baseUrl || configLlmObj.baseUrl || (config as any).llm?.baseUrl || '';
+    const model = activeProviderConfig.model || rawProviderConfig.model || configLlmObj.model || (config as any).llm?.model || 'default';
 
-    if (apiKey) {
-      llmRouter.registerProvider(
-        new OpenAICompatibleProvider({
-          baseUrl: baseUrl,
-          apiKey: apiKey,
-          model: model,
-        }),
-        true
-      );
-    } else if (options.allowUnconfiguredLLM) {
-      llmRouter.registerProvider(
-        {
-          name: 'unconfigured-fallback',
-          generate: async () => {
-            throw new Error(
-              'No LLM provider configured. Please run `fuckclaw setup` or set API keys in your environment.'
-            );
-          },
-        },
-        true
-      );
-    } else {
-      persistence.close();
-      throw new Error(
-        'LLM configuration is required. Please run `fuckclaw setup` or set FUCKCLAW_LLM_API_KEY.'
-      );
+    const hasEndpoint = typeof baseUrl === 'string' && baseUrl.trim() !== '';
+    const hasAuth = typeof apiKey === 'string' && apiKey.trim() !== '';
+    const isCompatible = activeProviderName === 'openai' || activeProviderName === 'openai-compatible' || activeProviderName === 'anthropic' || activeProviderName === 'google';
+    const canInitializeProvider = hasAuth || (hasEndpoint && isCompatible);
+
+    if (canInitializeProvider) {
+      let providerInstance: ILLMProvider;
+      
+      // Determine adapter via compatibility backend selection
+      if (activeProviderName === 'openai' || activeProviderName === 'anthropic' || activeProviderName === 'google' || activeProviderName === 'openai-compatible') {
+         // Using ProviderFactory instead of tightly coupling to OpenAICompatibleProvider class
+         providerInstance = ProviderFactory.createOpenAI({
+            baseUrl: baseUrl || '',
+            apiKey: apiKey || '',
+            model: model,
+         });
+      } else {
+         // Default fallback to OpenAI adapter for generic string matches
+         providerInstance = ProviderFactory.createOpenAI({
+            baseUrl: baseUrl || '',
+            apiKey: apiKey || '',
+            model: model,
+         });
+      }
+
+      // Explicitly register the requested configuration provider.
+      // This immediately removes the "unconfigured-fallback" if it was set
+      // by the prior logic.
+      llmRouter.registerProvider(providerInstance, true);
+    } else if (!options.allowUnconfiguredLLM) {
+       persistence.close();
+       const err = new Error(
+         'LLM configuration is required. Please run `fuckclaw setup` or set FUCKCLAW_LLM_API_KEY.'
+       ) as any;
+       err.code = 'CONFIGURATION_ERROR';
+       throw err;
     }
   }
 
@@ -189,9 +217,11 @@ export async function createFuckClawRuntime(
       const success = Boolean(evt.payload.success);
       const errorMsg = evt.payload.error ? String(evt.payload.error) : undefined;
       const output = evt.payload.output ? String(evt.payload.output) : '';
+      
+      const errorCode = (evt.payload.error as any)?.code || 'EXECUTION_ERROR';
 
-      if (taskId && !output && errorMsg && (errorMsg.includes('unconfigured') || errorMsg.includes('No LLM provider'))) {
-        // Do not record configuration failures as agent anti-patterns
+      // Skip config/bootstrap errors from polluting the self-improvement anti-pattern database
+      if (errorCode === 'CONFIGURATION_ERROR') {
         return;
       }
 
@@ -199,7 +229,7 @@ export async function createFuckClawRuntime(
         taskId,
         goal: output || taskId,
         success,
-        error: errorMsg ? { code: 'EXECUTION_ERROR', message: errorMsg } : undefined,
+        error: errorMsg ? { code: errorCode, message: errorMsg } : undefined,
         steps: [],
       });
     } catch {}

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createFuckClawRuntime, FuckClawClient } from '../src/index.js';
 import { TaskState } from '@fuckclaw/kernel';
-import { ILLMProvider, GenerationRequest, GenerationResponse } from '@fuckclaw/llm-router';
+import { ILLMProvider, GenerationRequest, GenerationResponse, OpenAICompatibleProvider } from '@fuckclaw/llm-router';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -81,6 +81,39 @@ describe('CLI Runtime Integration', () => {
 
       // Verify Plugin subsystem
       expect(runtime.pluginManager.list().length).toBe(0);
+    } finally {
+      await runtime.shutdown();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('should initialize successfully using unauthenticated local open-ai compatible configuration', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fuckclaw-cli-unauth-test-'));
+    
+    // Explicitly seed the persistence keystore config for an unauthenticated local endpoint
+    const tempConfig = {
+      workspace: { root: tempDir },
+      providers: {
+         openai: {
+           baseUrl: 'http://localhost:20128/v1',
+           model: 'bynara/agnes-2.5-flash',
+           apiKey: '' // intentionally empty for local server testing
+         }
+      },
+      llm: { provider: 'openai' }
+    };
+    
+    // allowUnconfiguredLLM is false here, so we verify that the above config is treated as "configured"
+    const runtime = await createFuckClawRuntime(tempConfig, undefined, process.env, { allowUnconfiguredLLM: false });
+    
+    try {
+      const pName = (runtime.kernel.llmRouter as any).defaultProviderName;
+      const p = (runtime.kernel.llmRouter as any).providers.get(pName);
+      expect(p).toBeDefined();
+      expect(p.name).toBe('openai-compatible');
+      expect((p as OpenAICompatibleProvider)['baseUrl']).toBe('http://localhost:20128/v1');
+      expect((p as OpenAICompatibleProvider)['apiKey']).toBe('');
+      expect((p as OpenAICompatibleProvider)['model']).toBe('bynara/agnes-2.5-flash');
     } finally {
       await runtime.shutdown();
       fs.rmSync(tempDir, { recursive: true, force: true });

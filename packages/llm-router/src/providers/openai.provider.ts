@@ -63,23 +63,38 @@ export class OpenAICompatibleProvider implements ILLMProvider {
 
   async generate(request: GenerationRequest): Promise<GenerationResponse> {
     const start = Date.now();
-    const response = await this.fetchImplementation(`${this.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: request.model ?? this.model,
-        messages: request.messages,
-        ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
-        ...(request.maxTokens === undefined ? {} : { max_tokens: request.maxTokens }),
-      }),
-    });
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (this.apiKey) {
+      headers['Authorization'] = `Bearer ${this.apiKey}`;
+    }
+
+    let response: Response;
+    try {
+      response = await this.fetchImplementation(`${this.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model: request.model ?? this.model,
+          messages: request.messages,
+          ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
+          ...(request.maxTokens === undefined ? {} : { max_tokens: request.maxTokens }),
+        }),
+      });
+    } catch (err: any) {
+      const e = new Error(`Provider connection failed to ${this.baseUrl}: ${err.message}`) as any;
+      e.code = 'PROVIDER_CONNECTION_ERROR';
+      throw e;
+    }
+
     const body = await response.text();
 
     if (!response.ok) {
-      throw new Error(this.extractError(body, `OpenAI-compatible provider returned HTTP ${response.status}`));
+      const msg = this.extractError(body, `OpenAI-compatible provider returned HTTP ${response.status}`);
+      const e = new Error(`Provider connection failed to ${this.baseUrl}: ${msg}`) as any;
+      e.code = 'PROVIDER_REQUEST_ERROR';
+      throw e;
     }
 
     const contentType = response.headers.get('content-type') ?? '';

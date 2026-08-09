@@ -31,7 +31,7 @@ export class Logger implements IObservability {
 
   log(entry: Omit<LogEntry, 'timestamp'>): void {
     const config = this.configManager.get();
-    const configuredLevel = config.system?.logLevel || config.logging?.level || 'info';
+    const configuredLevel = (this.configManager as any)._interactiveOverrideLogLevel || config.system?.logLevel || config.logging?.level || 'info';
     const levels: Record<string, number> = { debug: 0, info: 1, warn: 2, error: 3, fatal: 4 };
 
     const entryLevelPriority = levels[entry.level] ?? 1;
