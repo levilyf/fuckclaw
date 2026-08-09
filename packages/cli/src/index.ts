@@ -3,7 +3,7 @@ import { Logger, IObservability } from '@fuckclaw/observability';
 import { PersistenceLayer, IPersistenceLayer } from '@fuckclaw/persistence';
 import { EventBus, IEventBus } from '@fuckclaw/event-bus';
 import { WorkspaceManager, IWorkspaceManager } from '@fuckclaw/workspace';
-import { ToolRuntime, ShellTool, FilesystemTool, IToolRuntime } from '@fuckclaw/tool-runtime';
+import { ToolRuntime, ShellTool, FilesystemTool, HttpTool, PythonTool, GitTool, DockerTool, IToolRuntime } from '@fuckclaw/tool-runtime';
 import { ILLMProvider, LLMRouter, OpenAICompatibleProvider } from '@fuckclaw/llm-router';
 import { MemorySystem, IMemorySystem } from '@fuckclaw/memory';
 import { KnowledgeGraph, IKnowledgeGraph } from '@fuckclaw/knowledge-graph';
@@ -15,6 +15,8 @@ import { Scheduler } from '@fuckclaw/scheduler';
 import { MCPManager } from '@fuckclaw/mcp';
 import { PluginManager } from '@fuckclaw/plugins';
 import { NetworkManager } from '@fuckclaw/network';
+import { AgentOrchestrator } from '@fuckclaw/multi-agent';
+import { SelfImprovementEngine } from '@fuckclaw/self-improvement';
 import path from 'node:path';
 import os from 'node:os';
 
@@ -51,6 +53,8 @@ export interface FuckClawRuntimeInstance {
   mcpManager: MCPManager;
   pluginManager: PluginManager;
   networkManager: NetworkManager;
+  multiAgent: AgentOrchestrator;
+  selfImprovement: SelfImprovementEngine;
   shutdown: () => Promise<void>;
 }
 
@@ -88,6 +92,10 @@ export async function createFuckClawRuntime(
   const toolRuntime = new ToolRuntime(logger, eventBus);
   toolRuntime.register(new ShellTool());
   toolRuntime.register(new FilesystemTool(workspace));
+  toolRuntime.register(new HttpTool());
+  toolRuntime.register(new PythonTool());
+  toolRuntime.register(new GitTool());
+  toolRuntime.register(new DockerTool());
 
   const llmRouter = new LLMRouter(logger, eventBus);
   if (customLLMProvider) {
@@ -146,6 +154,43 @@ export async function createFuckClawRuntime(
   const planner = new Planner(kernel, logger, eventBus, llmRouter, persistence);
   const scheduler = new Scheduler(kernel, logger, eventBus, workspace, persistence);
 
+  // Multi-Agent & Self-Improvement Subsystems (§15, §23)
+  const selfImprovement = new SelfImprovementEngine(
+    persistence,
+    logger,
+    eventBus,
+    llmRouter,
+    skillsEngine
+  );
+  kernel.setNegativeConstraintProvider((query) => selfImprovement.getNegativeConstraints(query));
+
+  eventBus.subscribe('kernel.task.completed', async (evt) => {
+    try {
+      const taskId = String(evt.payload.taskId || '');
+      const success = Boolean(evt.payload.success);
+      const errorMsg = evt.payload.error ? String(evt.payload.error) : undefined;
+      const output = evt.payload.output ? String(evt.payload.output) : '';
+
+      await selfImprovement.processTrace({
+        taskId,
+        goal: output || taskId,
+        success,
+        error: errorMsg ? { code: 'EXECUTION_ERROR', message: errorMsg } : undefined,
+        steps: [],
+      });
+    } catch {}
+  });
+
+  const multiAgent = new AgentOrchestrator(
+    logger,
+    eventBus,
+    toolRuntime,
+    llmRouter,
+    workspace,
+    memorySystem,
+    persistence
+  );
+
   // Milestone 7 Subsystems
   const mcpManager = new MCPManager(toolRuntime, workspace, knowledgeGraph, logger);
   const pluginManager = new PluginManager(
@@ -190,6 +235,8 @@ export async function createFuckClawRuntime(
     mcpManager,
     pluginManager,
     networkManager,
+    multiAgent,
+    selfImprovement,
     shutdown: async () => {
       await networkManager.stop();
       await pluginManager.shutdown();

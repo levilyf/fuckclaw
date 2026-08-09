@@ -56,6 +56,10 @@ export class AgentKernel implements IAgentKernel {
     this.reasoningEngine = runner;
   }
 
+  setNegativeConstraintProvider(provider: (query: string) => Promise<string>): void {
+    this.contextManager.setNegativeConstraintProvider(provider);
+  }
+
   async boot(): Promise<void> {
     this.stateMachine.transition(KernelState.INITIALIZING);
     this.logger.log({

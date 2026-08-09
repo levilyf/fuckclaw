@@ -2,6 +2,7 @@ import { parse as parseToml } from 'smol-toml';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { loadProfile } from './profile.loader.js';
 import {
   GlobalConfig,
   GlobalConfigSchema,
@@ -19,6 +20,8 @@ export class ConfigManager implements IConfigManager {
       'cwd' in initialOrOptions ||
       'globalConfigPath' in initialOrOptions ||
       'projectConfigPath' in initialOrOptions ||
+      'profile' in initialOrOptions ||
+      'profilesDir' in initialOrOptions ||
       'overrides' in initialOrOptions ||
       'environment' in initialOrOptions
     ) {
@@ -68,7 +71,18 @@ export class ConfigManager implements IConfigManager {
       }
     }
 
-    // 3. Project TOML (./fuckclaw.toml or ./.fuckclaw.toml)
+    // 3. Profile TOML (~/.fuckclaw/config/profiles/{profile}.toml) (§19.4)
+    const activeProfile = options.profile ?? env.FUCKCLAW_PROFILE;
+    if (activeProfile) {
+      try {
+        const profileConfig = loadProfile(activeProfile, options.profilesDir);
+        if (profileConfig && Object.keys(profileConfig).length > 0) {
+          merged = this.deepMerge(merged, profileConfig);
+        }
+      } catch {}
+    }
+
+    // 4. Project TOML (./fuckclaw.toml or ./.fuckclaw.toml)
     const projectCandidates = options.projectConfigPath
       ? [options.projectConfigPath]
       : [path.join(cwd, 'fuckclaw.toml'), path.join(cwd, '.fuckclaw.toml')];
@@ -172,6 +186,11 @@ export class ConfigManager implements IConfigManager {
     return () => {
       this.listeners.get(keyPath)?.delete(handler);
     };
+  }
+
+  async setProfile(profileName: string): Promise<void> {
+    this.options = { ...this.options, profile: profileName };
+    await this.reload();
   }
 
   async reload(): Promise<void> {

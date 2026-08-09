@@ -7,7 +7,11 @@ export class ErrorClassifier {
     let code = err?.code || 'TOOL_ERROR';
     let retryable = false;
 
-    if (err?.killed || /timeout/i.test(message)) {
+    if (err?.name === 'ZodError' || /validation|invalid/i.test(message)) {
+      category = 'internal';
+      code = 'INVALID_PARAMS';
+      retryable = false;
+    } else if (err?.killed || /timeout/i.test(message)) {
       category = 'timeout';
       code = 'TIMEOUT';
       retryable = true;

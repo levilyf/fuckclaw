@@ -75,4 +75,19 @@ export class WorkspaceManager implements IWorkspaceManager {
   async listSnapshots(): Promise<string[]> {
     return this.snapshots.listSnapshots();
   }
+
+  async verifySnapshot(snapshotName: string): Promise<boolean> {
+    return this.snapshots.verifySnapshot(snapshotName);
+  }
+
+  async rollbackToSnapshot(snapshotName: string): Promise<boolean> {
+    const success = await this.snapshots.restoreSnapshot(snapshotName);
+    this.logger.log({
+      level: 'info',
+      module: 'workspace',
+      message: `Workspace rolled back to snapshot: ${snapshotName}`,
+      metadata: { snapshotName, success },
+    });
+    return success;
+  }
 }

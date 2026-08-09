@@ -86,6 +86,8 @@ export interface ConfigManagerOptions {
   cwd?: string;
   globalConfigPath?: string;
   projectConfigPath?: string;
+  profile?: string;
+  profilesDir?: string;
   overrides?: Record<string, unknown>;
   environment?: NodeJS.ProcessEnv;
 }

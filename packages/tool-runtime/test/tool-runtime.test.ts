@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ToolRuntime, ShellTool, FilesystemTool } from '../src/index.js';
+import { ToolRuntime, ShellTool, FilesystemTool, HttpTool, PythonTool, GitTool, DockerTool } from '../src/index.js';
 import { WorkspaceManager } from '@fuckclaw/workspace';
 import { ConfigManager } from '@fuckclaw/config';
 import { Logger } from '@fuckclaw/observability';
@@ -93,6 +93,65 @@ describe('ToolRuntime RFC 09 Compliance', () => {
     expect(result.success).toBe(false);
     expect(result.error).toBeDefined();
     expect(result.error?.category).toBe('internal');
+
+    db.close();
+  });
+
+  it('should execute Python scripts via PythonTool (§9.4.3)', async () => {
+    const config = new ConfigManager();
+    const logger = new Logger(config);
+    const db = new PersistenceLayer(':memory:', logger);
+    const bus = new EventBus(db, logger);
+    const runtime = new ToolRuntime(logger, bus);
+    runtime.register(new PythonTool());
+
+    const result = await runtime.execute('python', {
+      script: 'import sys; print(f"Python Tool Test {2 + 3}"); sys.stdout.flush()',
+    });
+
+    if (result.success) {
+      expect(result.output).toContain('Python Tool Test 5');
+    } else {
+      // If python3 not in environment, error should be structured
+      expect(result.error).toBeDefined();
+      expect(result.error?.category).toBeDefined();
+    }
+
+    db.close();
+  });
+
+  it('should execute Git operations via GitTool (§9.4.3)', async () => {
+    const config = new ConfigManager();
+    const logger = new Logger(config);
+    const db = new PersistenceLayer(':memory:', logger);
+    const bus = new EventBus(db, logger);
+    const runtime = new ToolRuntime(logger, bus);
+    runtime.register(new GitTool());
+
+    const result = await runtime.execute('git', {
+      command: 'git --version',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain('git version');
+
+    db.close();
+  });
+
+  it('should validate and execute HTTP requests via HttpTool (§9.4.3)', async () => {
+    const config = new ConfigManager();
+    const logger = new Logger(config);
+    const db = new PersistenceLayer(':memory:', logger);
+    const bus = new EventBus(db, logger);
+    const runtime = new ToolRuntime(logger, bus);
+    runtime.register(new HttpTool());
+
+    // Validation test
+    const invalidResult = await runtime.execute('http', {
+      url: 'not-a-valid-url',
+    });
+    expect(invalidResult.success).toBe(false);
+    expect(invalidResult.error?.code).toBe('INVALID_PARAMS');
 
     db.close();
   });

@@ -118,6 +118,23 @@ export class EpisodicStore {
     return rows;
   }
 
+  async getUnconsolidated(limit: number = 50): Promise<EpisodicMemoryRecord[]> {
+    const rows = this.db.query<EpisodicRow>(
+      `SELECT * FROM episodic_memories WHERE consolidated = 0 ORDER BY timestamp ASC LIMIT ?`,
+      [limit]
+    );
+    return rows.map((r) => this.rowToRecord(r));
+  }
+
+  async markConsolidated(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    const placeholders = ids.map(() => '?').join(',');
+    this.db.execute(
+      `UPDATE episodic_memories SET consolidated = 1 WHERE id IN (${placeholders})`,
+      ids
+    );
+  }
+
   async getAll(limit: number = 200): Promise<EpisodicMemoryRecord[]> {
     const rows = this.db.query<EpisodicRow>(
       `SELECT * FROM episodic_memories ORDER BY timestamp DESC LIMIT ?`,

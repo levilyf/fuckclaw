@@ -8,3 +8,4 @@ export * from './metrics/registry.js';
 export * from './metrics/collectors.js';
 export * from './audit/audit-logger.js';
 export * from './timeline/reasoning-timeline.js';
+export * from './replay/trace-replay-engine.js';

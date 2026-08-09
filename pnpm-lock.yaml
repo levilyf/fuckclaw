@@ -29,6 +29,9 @@ importers:
       '@fuckclaw/llm-router':
         specifier: workspace:*
         version: link:packages/llm-router
+      '@fuckclaw/multi-agent':
+        specifier: workspace:*
+        version: link:packages/multi-agent
       '@fuckclaw/observability':
         specifier: workspace:*
         version: link:packages/observability
@@ -38,6 +41,9 @@ importers:
       '@fuckclaw/reasoning':
         specifier: workspace:*
         version: link:packages/reasoning
+      '@fuckclaw/self-improvement':
+        specifier: workspace:*
+        version: link:packages/self-improvement
       '@fuckclaw/skills':
         specifier: workspace:*
         version: link:packages/skills
@@ -93,6 +99,9 @@ importers:
       '@fuckclaw/memory':
         specifier: workspace:*
         version: link:../memory
+      '@fuckclaw/multi-agent':
+        specifier: workspace:*
+        version: link:../multi-agent
       '@fuckclaw/network':
         specifier: workspace:*
         version: link:../network
@@ -114,6 +123,9 @@ importers:
       '@fuckclaw/scheduler':
         specifier: workspace:*
         version: link:../scheduler
+      '@fuckclaw/self-improvement':
+        specifier: workspace:*
+        version: link:../self-improvement
       '@fuckclaw/skills':
         specifier: workspace:*
         version: link:../skills
@@ -333,6 +345,46 @@ importers:
         specifier: ^1.4.0
         version: 1.6.1(@types/node@20.19.43)
 
+  packages/multi-agent:
+    dependencies:
+      '@fuckclaw/core':
+        specifier: workspace:*
+        version: link:../core
+      '@fuckclaw/event-bus':
+        specifier: workspace:*
+        version: link:../event-bus
+      '@fuckclaw/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@fuckclaw/llm-router':
+        specifier: workspace:*
+        version: link:../llm-router
+      '@fuckclaw/memory':
+        specifier: workspace:*
+        version: link:../memory
+      '@fuckclaw/observability':
+        specifier: workspace:*
+        version: link:../observability
+      '@fuckclaw/persistence':
+        specifier: workspace:*
+        version: link:../persistence
+      '@fuckclaw/tool-runtime':
+        specifier: workspace:*
+        version: link:../tool-runtime
+      '@fuckclaw/workspace':
+        specifier: workspace:*
+        version: link:../workspace
+      ulidx:
+        specifier: ^2.3.1
+        version: 2.4.1
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.4.0
+        version: 1.6.1(@types/node@20.19.43)
+
   packages/network:
     dependencies:
       '@fuckclaw/core':
@@ -530,6 +582,46 @@ importers:
       '@fuckclaw/observability':
         specifier: workspace:*
         version: link:../observability
+      '@fuckclaw/workspace':
+        specifier: workspace:*
+        version: link:../workspace
+      ulidx:
+        specifier: ^2.3.1
+        version: 2.4.1
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.4.0
+        version: 1.6.1(@types/node@20.19.43)
+
+  packages/self-improvement:
+    dependencies:
+      '@fuckclaw/core':
+        specifier: workspace:*
+        version: link:../core
+      '@fuckclaw/event-bus':
+        specifier: workspace:*
+        version: link:../event-bus
+      '@fuckclaw/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@fuckclaw/llm-router':
+        specifier: workspace:*
+        version: link:../llm-router
+      '@fuckclaw/memory':
+        specifier: workspace:*
+        version: link:../memory
+      '@fuckclaw/observability':
+        specifier: workspace:*
+        version: link:../observability
+      '@fuckclaw/persistence':
+        specifier: workspace:*
+        version: link:../persistence
+      '@fuckclaw/skills':
+        specifier: workspace:*
+        version: link:../skills
       '@fuckclaw/workspace':
         specifier: workspace:*
         version: link:../workspace

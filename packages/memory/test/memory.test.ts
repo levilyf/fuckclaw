@@ -8,6 +8,10 @@ import {
   WorkingMemory,
   EpisodicStore,
   SemanticStore,
+  ProceduralStore,
+  ConsolidationDaemon,
+  DreamingEngine,
+  TraceCompressor,
   HybridRetriever,
   generateSimpleEmbedding,
   cosineSimilarity,
@@ -644,5 +648,142 @@ describe('MemorySystem', () => {
     expect(facts.some((f) => f.record.statement.includes('levi'))).toBe(true);
     expect(facts.some((f) => f.record.statement.includes('Zed'))).toBe(true);
     expect(facts.some((f) => f.record.statement.includes('mushrooms'))).toBe(true);
+  });
+
+  it('should compress and decompress execution traces with lossless roundtrip integrity (§6.3)', () => {
+    const rawTrace = 'Step 1: Execute bash command ls -la\nStep 2: Read package.json\nStep 3: Run test suite with vitest\n'.repeat(20);
+    const compressed = TraceCompressor.compress(rawTrace);
+
+    expect(compressed).toBeDefined();
+    expect(compressed.length).toBeGreaterThan(0);
+
+    const decompressed = TraceCompressor.decompress(compressed);
+    expect(decompressed).toBe(rawTrace);
+  });
+
+  it('should persist procedural memory workflows in SQLite and track success rates (§6.4.4)', async () => {
+    const memory = new MemorySystem(db, logger, eventBus, 'session-proc');
+
+    const procId = await memory.procedural.recordProcedure({
+      name: 'docker_service_debug_workflow',
+      intentSignature: 'Diagnose why container fails health checks',
+      preconditions: ['docker daemon is running', 'container is created'],
+      executionGraph: [
+        { order: 1, actionType: 'tool_call', toolName: 'docker', paramTemplate: { action: 'ps' }, expectedOutcome: 'Container listed' },
+        { order: 2, actionType: 'tool_call', toolName: 'docker', paramTemplate: { action: 'logs' }, expectedOutcome: 'Error logs captured' },
+      ],
+    });
+
+    expect(procId).toBeDefined();
+
+    // Query procedural memory
+    const found = await memory.procedural.getProcedure(procId);
+    expect(found).not.toBeNull();
+    expect(found!.name).toBe('docker_service_debug_workflow');
+    expect(found!.executionGraph.length).toBe(2);
+
+    // Search by intent
+    const matches = await memory.procedural.queryProcedural('container health checks');
+    expect(matches.length).toBeGreaterThan(0);
+    expect(matches[0]!.name).toBe('docker_service_debug_workflow');
+
+    // Record execution outcomes
+    await memory.procedural.recordOutcome(procId, true);
+    await memory.procedural.recordOutcome(procId, false);
+
+    const updated = await memory.procedural.getProcedure(procId);
+    expect(updated!.executionCount).toBe(2);
+    expect(updated!.successRate).toBe(0.5);
+  });
+
+  it('should run memory consolidation and extract facts & procedures (§6.6.1)', async () => {
+    const memory = new MemorySystem(db, logger, eventBus, 'session-consolidation');
+
+    // Record 2 tool execution episodes for a task
+    await memory.recordEpisode({
+      timestamp: Date.now() - 10000,
+      sessionId: 'session-consolidation',
+      taskId: 'task-deploy-web',
+      source: 'tool_execution',
+      actor: 'agent',
+      summary: 'Built frontend assets with vite build',
+      content: 'vite build finished successfully in 2.1s',
+      importanceScore: 0.8,
+      toolCall: {
+        toolName: 'shell',
+        inputParams: { command: 'pnpm build' },
+        outputResult: 'dist folder created',
+        exitCode: 0,
+        durationMs: 2100,
+      },
+      embedding: generateSimpleEmbedding('vite build frontend assets'),
+    });
+
+    await memory.recordEpisode({
+      timestamp: Date.now() - 5000,
+      sessionId: 'session-consolidation',
+      taskId: 'task-deploy-web',
+      source: 'tool_execution',
+      actor: 'agent',
+      summary: 'Started HTTP server on port 8420',
+      content: 'server listening on http://127.0.0.1:8420',
+      importanceScore: 0.9,
+      toolCall: {
+        toolName: 'shell',
+        inputParams: { command: 'node dist/server.js' },
+        outputResult: 'server running',
+        exitCode: 0,
+        durationMs: 500,
+      },
+      embedding: generateSimpleEmbedding('HTTP server listening 8420'),
+    });
+
+    // Run consolidation cycle
+    const report = await memory.runConsolidationCycle();
+    expect(report.episodesProcessed).toBe(2);
+    expect(report.factsExtracted).toBeGreaterThan(0);
+    expect(report.proceduresExtracted).toBe(1);
+  });
+
+  it('should run dreaming engine cycle and resolve semantic contradictions (§6.6.2)', async () => {
+    const memory = new MemorySystem(db, logger, eventBus, 'session-dreaming');
+
+    // 1. Old fact: Database is PostgreSQL
+    const oldFactId = await memory.assertFact({
+      subject: 'auth_service.database',
+      predicate: 'engine',
+      object: 'PostgreSQL 16',
+      statement: 'Auth service uses PostgreSQL 16 on port 5432',
+      confidence: 1.0,
+      sourceEpisodicIds: [],
+      validFrom: Date.now() - 100000,
+      validUntil: null,
+      embedding: generateSimpleEmbedding('auth service postgresql database'),
+    });
+
+    // 2. Newer fact: Database was migrated to SQLite
+    const newFactId = await memory.assertFact({
+      subject: 'auth_service.database',
+      predicate: 'engine',
+      object: 'SQLite 3',
+      statement: 'Auth service uses SQLite 3 in WAL mode',
+      confidence: 1.0,
+      sourceEpisodicIds: [],
+      validFrom: Date.now() - 10000,
+      validUntil: null,
+      embedding: generateSimpleEmbedding('auth service sqlite database'),
+    });
+
+    // Run dreaming cycle
+    const report = await memory.runDreamingCycle();
+    expect(report.contradictionsResolved).toBe(1);
+
+    // Verify older fact is retracted/invalidated
+    const oldFact = await (memory as any).semanticStore.getFact(oldFactId);
+    expect(oldFact!.validUntil).not.toBeNull();
+
+    // Verify newer fact is still active
+    const newFact = await (memory as any).semanticStore.getFact(newFactId);
+    expect(newFact!.validUntil).toBeNull();
   });
 });

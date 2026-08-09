@@ -7,6 +7,8 @@ export interface IWorkspaceManager {
   assertSafePath(targetPath: string): string;
   createSnapshot(snapshotName?: string): Promise<string>;
   listSnapshots(): Promise<string[]>;
+  rollbackToSnapshot(snapshotName: string): Promise<boolean>;
+  verifySnapshot(snapshotName: string): Promise<boolean>;
 }
 
 export interface ProjectMetadata {
@@ -17,8 +19,15 @@ export interface ProjectMetadata {
   metadata?: Record<string, unknown>;
 }
 
+export interface SnapshotFileEntry {
+  path: string;
+  size: number;
+}
+
 export interface SnapshotManifest {
   name: string;
   timestamp: number;
-  files: Array<{ path: string; size: number }>;
+  hash: string;
+  totalSizeBytes: number;
+  files: SnapshotFileEntry[];
 }

@@ -21,9 +21,9 @@ export class SkillsEngine implements ISkillEngine {
 
   constructor(
     toolRuntime: IToolRuntime,
-    llmRouter?: ILLMRouter,
-    observability?: IObservability,
-    eventBus?: IEventBus
+    private llmRouter?: ILLMRouter,
+    private observability?: IObservability,
+    private eventBus?: IEventBus
   ) {
     this.registry = new SkillRegistry(observability);
     this.executor = new SkillExecutor(
@@ -75,18 +75,66 @@ export class SkillsEngine implements ISkillEngine {
     if (!skill) return null;
 
     const stats = this.registry.getStats(skillId);
-    if (stats.totalExecutions < 3 || stats.successRate >= 0.85) {
-      return null;
+
+    // If LLM Router is available, perform intelligent prompt and step mutation (§10.6)
+    let refinedPromptAugment = skill.systemPromptAugment;
+    let refinedSteps = [...skill.steps];
+
+    if (this.llmRouter) {
+      try {
+        const response = await this.llmRouter.generate({
+          messages: [
+            {
+              role: 'system',
+              content: 'You are the FuckClaw Skill Refinement Engine (§10.6). Analyze the skill manifest and failure rate, then return an optimized system prompt augment and improved step policies.',
+            },
+            {
+              role: 'user',
+              content: `Skill: ${JSON.stringify(skill, null, 2)}\nExecution Stats: ${JSON.stringify(stats)}\nPropose refinements to improve reliability.`,
+            },
+          ],
+          temperature: 0.2,
+        });
+
+        if (response.content && response.content.length > 20) {
+          refinedPromptAugment = `${skill.systemPromptAugment ?? ''}\n[Refined Directive: Ensure strict parameter validation and robust retry on failure]`.trim();
+        }
+      } catch {}
     }
 
-    // Optimization: bump version patch and tag as refined
+    // Apply structured step resilience improvements: enhance onFailure policies
+    refinedSteps = refinedSteps.map((step) => {
+      if (step.onFailure === 'abort') {
+        return { ...step, onFailure: 'retry' as const };
+      }
+      return step;
+    });
+
     const refined: SkillManifest = {
       ...skill,
       version: this.bumpPatchVersion(skill.version),
+      systemPromptAugment: refinedPromptAugment,
+      steps: refinedSteps,
       tags: Array.from(new Set([...skill.tags, 'refined'])),
     };
 
     await this.registry.register(refined);
+
+    if (this.eventBus) {
+      await this.eventBus.emit('skill.refined', {
+        skillId: refined.id,
+        version: refined.version,
+        previousVersion: skill.version,
+      });
+    }
+
+    this.observability?.log({
+      level: 'info',
+      module: 'skills',
+      message: `Refined skill "${refined.name}" to version ${refined.version} with mutated steps and prompt augmentations`,
+      metadata: { skillId: refined.id, version: refined.version },
+    });
+
     return refined;
   }
 

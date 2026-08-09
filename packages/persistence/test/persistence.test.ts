@@ -9,12 +9,14 @@ describe('PersistenceLayer RFC 20 Compliance', () => {
       'SELECT version, name FROM schema_migrations ORDER BY version ASC'
     );
 
-    expect(migrations.length).toBe(5);
+    expect(migrations.length).toBe(7);
     expect(migrations[0]!.name).toBe('create_events_schema');
     expect(migrations[1]!.name).toBe('create_tasks_and_checkpoints_schema');
     expect(migrations[2]!.name).toBe('create_memory_schema');
     expect(migrations[3]!.name).toBe('create_planner_and_scheduler_schema');
     expect(migrations[4]!.name).toBe('create_knowledge_graph_schema');
+    expect(migrations[5]!.name).toBe('create_self_improvement_and_delegation_schema');
+    expect(migrations[6]!.name).toBe('create_procedural_memory_schema');
 
     const integrity = db.integrityCheck();
     expect(integrity.ok).toBe(true);

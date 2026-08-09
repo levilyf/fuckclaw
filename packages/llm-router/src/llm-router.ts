@@ -26,6 +26,24 @@ export class LLMRouter implements ILLMRouter {
 
   async generate(request: GenerationRequest): Promise<GenerationResponse> {
     const start = Date.now();
+    const cacheKey = ResponseCache.generateKey(request);
+
+    // 1. Response Cache Lookup (§12.2)
+    const cached = this.cache.get(cacheKey);
+    if (cached) {
+      this.logger.log({
+        level: 'info',
+        module: 'llm-router',
+        message: `Serving cached response for model ${cached.model}`,
+        metadata: { model: cached.model, cached: true },
+      });
+      await this.eventBus.emit('llm.request.cache_hit', {
+        provider: cached.provider,
+        model: cached.model,
+      });
+      return cached;
+    }
+
     await this.eventBus.emit('llm.request.started', {
       model: request.model,
       provider: request.provider ?? this.defaultProviderName,
@@ -74,6 +92,9 @@ export class LLMRouter implements ILLMRouter {
           message: `LLM request completed in ${duration}ms via ${response.provider}`,
           metadata: { model: response.model, usage: response.usage, costUsd },
         });
+
+        // Store in Response Cache (§12.2)
+        this.cache.set(cacheKey, response);
 
         return response;
       } catch (err) {

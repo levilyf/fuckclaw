@@ -7,8 +7,13 @@ export class ContextManager {
   constructor(
     private workspace: IWorkspaceManager,
     private toolRuntime: IToolRuntime,
-    private memorySystem?: IMemorySystem
+    private memorySystem?: IMemorySystem,
+    private negativeConstraintProvider?: (query: string) => Promise<string>
   ) {}
+
+  setNegativeConstraintProvider(provider: (query: string) => Promise<string>): void {
+    this.negativeConstraintProvider = provider;
+  }
 
   async buildContext(task: Task): Promise<ContextBundle> {
     const availableTools = this.toolRuntime.list().map((t) => t.name);
@@ -31,6 +36,16 @@ export class ContextManager {
       if (recalledContext && recalledContext.trim().length > 0) {
         systemPrompt += `\n\n--- RECALLED MEMORY CONTEXT ---\n${recalledContext}\nGround your understanding in these verified historical facts and experiences where relevant.\n--- END MEMORY CONTEXT ---`;
       }
+    }
+
+    // Anti-pattern negative constraints injection (§23.3.2)
+    if (this.negativeConstraintProvider) {
+      try {
+        const constraints = await this.negativeConstraintProvider(task.description);
+        if (constraints && constraints.trim().length > 0) {
+          systemPrompt += `\n\n${constraints}`;
+        }
+      } catch {}
     }
 
     return {

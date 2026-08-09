@@ -181,7 +181,119 @@ export class HttpServer {
       return { count: tools.length, tools };
     });
 
-    // 6. Webhooks Ingress
+    // 6. Web Dashboard Overview API & Web UI (§22.4)
+    this.registerRoute('GET', '/api/dashboard/overview', async () => {
+      const allTasks = this.kernel.listTasks();
+      const activeTasks = allTasks.filter(
+        (t) =>
+          t.state !== ('completed' as any) &&
+          t.state !== ('failed' as any) &&
+          t.state !== ('cancelled' as any)
+      );
+      const metrics = this.logger?.getMetrics?.().getSnapshot?.() ?? {};
+      const toolsCount = this.toolRuntime?.list().length ?? 0;
+      const triggersCount = this.scheduler?.listTriggers().length ?? 0;
+
+      return {
+        kernel: {
+          state: this.kernel.getState(),
+          uptimeSeconds: Math.floor(process.uptime()),
+        },
+        tasks: {
+          activeCount: activeTasks.length,
+          totalCount: allTasks.length,
+          activeTasks,
+        },
+        metrics,
+        counts: {
+          tools: toolsCount,
+          triggers: triggersCount,
+        },
+      };
+    });
+
+    // 7. Web Dashboard Single-Page HTML Interface (§22.4)
+    this.registerRoute('GET', '/dashboard', async () => {
+      return {
+        _rawHtml: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>FuckClaw AI Operating System — Web Dashboard</title>
+  <style>
+    :root { --bg: #0f172a; --panel: #1e293b; --text: #f8fafc; --accent: #38bdf8; --green: #22c55e; }
+    body { margin: 0; padding: 24px; font-family: ui-monospace, monospace; background: var(--bg); color: var(--text); }
+    h1 { color: var(--accent); margin-top: 0; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+    .card { background: var(--panel); border: 1px solid #334155; border-radius: 8px; padding: 18px; }
+    .card h2 { margin-top: 0; color: #94a3b8; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat { font-size: 28px; font-weight: bold; color: var(--green); margin: 8px 0; }
+    button { background: var(--accent); color: #000; border: none; padding: 8px 16px; border-radius: 4px; font-weight: bold; cursor: pointer; }
+    input { background: #0f172a; border: 1px solid #475569; color: #fff; padding: 8px; border-radius: 4px; width: calc(100% - 20px); margin-bottom: 10px; }
+    pre { background: #0b1120; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>⚡ FuckClaw Web Dashboard (§22.4)</h1>
+  <div class="grid">
+    <div class="card">
+      <h2>Agent Kernel Status</h2>
+      <div id="kernelState" class="stat">Loading...</div>
+      <p id="uptime">Uptime: --</p>
+    </div>
+    <div class="card">
+      <h2>Quick Task Dispatcher</h2>
+      <input type="text" id="taskInput" placeholder="Enter task objective...">
+      <button onclick="submitTask()">Dispatch Task</button>
+      <div id="taskStatus" style="margin-top: 10px; font-size: 12px;"></div>
+    </div>
+    <div class="card">
+      <h2>Registered Tools</h2>
+      <div id="toolsList">Loading tools...</div>
+    </div>
+    <div class="card">
+      <h2>Observability Metrics</h2>
+      <pre id="metricsJson">Loading metrics...</pre>
+    </div>
+  </div>
+  <script>
+    async function loadData() {
+      try {
+        const res = await fetch('/api/dashboard/overview');
+        const data = await res.json();
+        document.getElementById('kernelState').innerText = data.kernel.state.toUpperCase();
+        document.getElementById('uptime').innerText = 'Uptime: ' + data.kernel.uptimeSeconds + 's';
+        document.getElementById('metricsJson').innerText = JSON.stringify(data.metrics, null, 2);
+
+        const toolsRes = await fetch('/api/tools');
+        const toolsData = await toolsRes.json();
+        document.getElementById('toolsList').innerHTML = toolsData.tools.map(t => '<div>✓ ' + t.name + '</div>').join('');
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    async function submitTask() {
+      const desc = document.getElementById('taskInput').value;
+      if (!desc) return;
+      document.getElementById('taskStatus').innerText = 'Submitting task...';
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: desc })
+      });
+      const data = await res.json();
+      document.getElementById('taskStatus').innerText = 'Task ' + data.taskId + ' (' + data.state + ')';
+      loadData();
+    }
+    loadData();
+    setInterval(loadData, 5000);
+  </script>
+</body>
+</html>`,
+      };
+    });
+
+    // 8. Webhooks Ingress
     this.registerRoute('POST', '/api/webhooks/:id', async (ctx) => {
       const triggerId = ctx.params.id || '';
       const payload = ctx.body;
@@ -302,7 +414,12 @@ export class HttpServer {
     try {
       const responseData = await matchedEntry.handler(routeCtx);
       if (!res.writableEnded) {
-        this.sendJson(res, 200, responseData);
+        if (responseData && typeof responseData === 'object' && '_rawHtml' in (responseData as any)) {
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end((responseData as any)._rawHtml);
+        } else {
+          this.sendJson(res, 200, responseData);
+        }
       }
     } catch (err: unknown) {
       const statusCode = (err as { statusCode?: number }).statusCode || 500;

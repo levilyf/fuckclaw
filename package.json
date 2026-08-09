@@ -11,7 +11,11 @@
     "clean": "pnpm -r run clean",
     "boot": "node scripts/boot.js",
     "fuckclaw": "node packages/cli/dist/bin.js",
-    "demo:m3": "node scripts/milestone3-demo.js"
+    "demo:m3": "node scripts/milestone3-demo.js",
+    "demo:m8": "node scripts/milestone8-demo.js",
+    "demo:multi-agent": "node scripts/demo-multi-agent.js",
+    "demo:self-improvement": "node scripts/demo-self-improvement.js",
+    "demo:e2e": "node scripts/full-architecture-e2e.js"
   },
   "dependencies": {
     "@fuckclaw/cli": "workspace:*",
@@ -21,9 +25,11 @@
     "@fuckclaw/kernel": "workspace:*",
     "@fuckclaw/knowledge-graph": "workspace:*",
     "@fuckclaw/llm-router": "workspace:*",
+    "@fuckclaw/multi-agent": "workspace:*",
     "@fuckclaw/observability": "workspace:*",
     "@fuckclaw/persistence": "workspace:*",
     "@fuckclaw/reasoning": "workspace:*",
+    "@fuckclaw/self-improvement": "workspace:*",
     "@fuckclaw/skills": "workspace:*",
     "@fuckclaw/tool-runtime": "workspace:*",
     "@fuckclaw/workspace": "workspace:*",

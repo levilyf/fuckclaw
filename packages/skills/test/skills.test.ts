@@ -335,5 +335,41 @@ steps:
       expect(fetched).not.toBeNull();
       expect(fetched?.origin).toBe('extracted');
     });
+
+    it('refines an existing skill by mutating steps and system prompt augmentations (§10.6)', async () => {
+      const manifest = ManifestParser.parse(`
+id: fragile_deploy_skill
+name: Fragile Deploy
+version: "1.0.0"
+description: Initial fragile deployment routine
+origin: user_defined
+tags: [deploy]
+triggerPatterns: []
+inputs: []
+outputs: []
+requiredTools: [shell]
+steps:
+  - id: step_deploy
+    action:
+      type: tool_call
+      tool: shell
+      argsTemplate:
+        command: "echo deploy"
+    onFailure: abort
+`);
+
+      await skillsEngine.register(manifest);
+
+      const refined = await skillsEngine.refine('fragile_deploy_skill');
+      expect(refined).not.toBeNull();
+      expect(refined?.version).toBe('1.0.1');
+      expect(refined?.tags).toContain('refined');
+      // Step failure policy mutated from abort to retry
+      expect(refined?.steps[0]?.onFailure).toBe('retry');
+
+      const updated = skillsEngine.get('fragile_deploy_skill');
+      expect(updated?.version).toBe('1.0.1');
+      expect(updated?.steps[0]?.onFailure).toBe('retry');
+    });
   });
 });

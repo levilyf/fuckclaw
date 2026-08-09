@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ReasoningEngine, ToolCallParser } from '../src/index.js';
+import {
+  ReasoningEngine,
+  ToolCallParser,
+  DirectStrategy,
+  TreeSearchStrategy,
+  BeamSearch,
+  StateEvaluator,
+  StrategySelector,
+} from '../src/index.js';
 import { ConfigManager } from '@fuckclaw/config';
 import { Logger } from '@fuckclaw/observability';
 import { PersistenceLayer } from '@fuckclaw/persistence';
@@ -155,6 +163,79 @@ Final Answer: All operations succeeded`;
     const createdFilePath = workspace.resolvePath('workspace', 'react-test.txt');
     expect(fs.existsSync(createdFilePath)).toBe(true);
     expect(fs.readFileSync(createdFilePath, 'utf8')).toBe('ReAct loop worked');
+  });
+
+  it('should execute Direct reasoning strategy for simple lookups (§11.2)', async () => {
+    const directTask = createTask('What is the capital of France?');
+    directTask.tags = ['strategy:direct'];
+
+    const loggerConfig = new ConfigManager({ workspace: { root: tempDir } });
+    const logger = new Logger(loggerConfig);
+    const db = new PersistenceLayer(':memory:', logger);
+    const bus = new EventBus(db, logger);
+    const toolRuntime = new ToolRuntime(logger, bus);
+    const llmRouter = new LLMRouter(logger, bus);
+    llmRouter.registerProvider({
+      name: 'direct-mock',
+      async generate(_request: GenerationRequest): Promise<GenerationResponse> {
+        return {
+          content: 'The capital of France is Paris.',
+          provider: 'direct-mock',
+          model: 'mock',
+          usage: { promptTokens: 5, completionTokens: 5, totalTokens: 10 },
+        };
+      },
+    });
+
+    const engine = new ReasoningEngine(logger, bus, toolRuntime, llmRouter);
+    const result = await engine.runTask(directTask, createContext(directTask));
+
+    expect(result.output).toContain('Paris');
+    expect(result.steps.length).toBe(1);
+    expect(result.steps[0]!.action).toBe('direct_response');
+    db.close();
+  });
+
+  it('should execute Tree Search strategy with branch expansion and state evaluation (§11.4)', async () => {
+    const treeTask = createTask('Explore alternative paths to solve puzzle');
+    treeTask.tags = ['strategy:tree_search'];
+
+    const loggerConfig = new ConfigManager({ workspace: { root: tempDir } });
+    const logger = new Logger(loggerConfig);
+    const db = new PersistenceLayer(':memory:', logger);
+    const bus = new EventBus(db, logger);
+    const toolRuntime = new ToolRuntime(logger, bus);
+    const llmRouter = new LLMRouter(logger, bus);
+    llmRouter.registerProvider({
+      name: 'tree-search-mock',
+      async generate(_request: GenerationRequest): Promise<GenerationResponse> {
+        return {
+          content: 'Final Answer: Solution path explored and verified with score 0.95',
+          provider: 'tree-search-mock',
+          model: 'mock-tree',
+          usage: { promptTokens: 15, completionTokens: 15, totalTokens: 30 },
+        };
+      },
+    });
+
+    const engine = new ReasoningEngine(logger, bus, toolRuntime, llmRouter);
+    const result = await engine.runTask(treeTask, createContext(treeTask));
+
+    expect(result.output).toContain('Solution path explored');
+    expect(result.steps.length).toBeGreaterThan(0);
+    db.close();
+  });
+
+  it('should correctly evaluate state progress in StateEvaluator (§11.4)', () => {
+    const goal = 'Create and verify database backup';
+    const failStep = { step: 1, action: 'backup()', observation: 'Error: disk full', success: false };
+    const successStep = { step: 1, action: 'backup()', observation: 'Database backup completed and verified', success: true };
+
+    const evalFail = StateEvaluator.evaluate(goal, [failStep]);
+    const evalSuccess = StateEvaluator.evaluate(goal, [successStep]);
+
+    expect(evalSuccess.score).toBeGreaterThan(evalFail.score);
+    expect(evalSuccess.isComplete).toBe(true);
   });
 });
 

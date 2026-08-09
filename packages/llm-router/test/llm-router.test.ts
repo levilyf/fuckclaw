@@ -1,5 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
-import { LLMRouter, MockLLMProvider, OpenAICompatibleProvider } from '../src/index.js';
+import {
+  LLMRouter,
+  MockLLMProvider,
+  OpenAICompatibleProvider,
+  AnthropicProvider,
+  GoogleProvider,
+  ResponseCache,
+} from '../src/index.js';
 import { ConfigManager } from '@fuckclaw/config';
 import { Logger } from '@fuckclaw/observability';
 import { PersistenceLayer } from '@fuckclaw/persistence';
@@ -122,5 +129,60 @@ describe('LLMRouter', () => {
 
     await expect(provider.generate({ messages: [{ role: 'user', content: 'hello' }] }))
       .rejects.toThrow('invalid model');
+  });
+
+  it('should cache responses and return cache hit on identical requests (§12.2)', async () => {
+    const config = new ConfigManager();
+    const logger = new Logger(config);
+    const db = new PersistenceLayer(':memory:', logger);
+    const bus = new EventBus(db, logger);
+
+    let callCount = 0;
+    const provider = {
+      name: 'counted-mock',
+      async generate() {
+        callCount++;
+        return {
+          content: `Generated response #${callCount}`,
+          provider: 'counted-mock',
+          model: 'mock-model',
+          usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
+        };
+      },
+    };
+
+    const router = new LLMRouter(logger, bus);
+    router.registerProvider(provider, true);
+
+    const req = {
+      messages: [{ role: 'user' as const, content: 'deterministic prompt' }],
+      temperature: 0,
+    };
+
+    // 1. First call -> Cache Miss
+    const res1 = await router.generate(req);
+    expect(res1.content).toBe('Generated response #1');
+    expect(callCount).toBe(1);
+
+    // 2. Second identical call -> Cache Hit
+    const res2 = await router.generate(req);
+    expect(res2.content).toBe('Generated response #1');
+    expect(callCount).toBe(1); // Provider not called again
+
+    db.close();
+  });
+
+  it('should construct Anthropic and Google providers with configuration (§12.3)', () => {
+    const anthropic = new AnthropicProvider({
+      apiKey: 'test-ant-key',
+      defaultModel: 'claude-3-5-sonnet',
+    });
+    expect(anthropic.name).toBe('anthropic');
+
+    const google = new GoogleProvider({
+      apiKey: 'test-gemini-key',
+      defaultModel: 'gemini-1.5-flash',
+    });
+    expect(google.name).toBe('google');
   });
 });

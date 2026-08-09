@@ -15,14 +15,20 @@ import {
 import { WorkingMemory } from './working/working-memory.js';
 import { EpisodicStore } from './episodic/episodic-store.js';
 import { SemanticStore } from './semantic/semantic-store.js';
+import { ProceduralStore } from './procedural/procedural-store.js';
+import { ConsolidationDaemon, ConsolidationReport } from './consolidation/consolidation-daemon.js';
+import { DreamingEngine, DreamingReport } from './consolidation/dreaming-engine.js';
 import { HybridRetriever } from './retrieval/hybrid-retriever.js';
 import { generateSimpleEmbedding } from './decay/ebbinghaus-decay.js';
 
 export class MemorySystem implements IMemorySystem {
   public readonly working: WorkingMemory;
+  public readonly procedural: ProceduralStore;
   private readonly episodicStore: EpisodicStore;
   private readonly semanticStore: SemanticStore;
   private readonly retriever: HybridRetriever;
+  private readonly consolidationDaemon: ConsolidationDaemon;
+  private readonly dreamingEngine: DreamingEngine;
 
   constructor(
     db: IPersistenceLayer,
@@ -33,7 +39,16 @@ export class MemorySystem implements IMemorySystem {
     this.working = new WorkingMemory(sessionId ?? ulid());
     this.episodicStore = new EpisodicStore(db, logger);
     this.semanticStore = new SemanticStore(db, logger);
+    this.procedural = new ProceduralStore(db, logger);
     this.retriever = new HybridRetriever(this.episodicStore, this.semanticStore, logger);
+    this.consolidationDaemon = new ConsolidationDaemon(
+      this.episodicStore,
+      this.semanticStore,
+      this.procedural,
+      logger,
+      eventBus
+    );
+    this.dreamingEngine = new DreamingEngine(this.semanticStore, logger, eventBus);
   }
 
   // ── Episodic ──
@@ -92,7 +107,26 @@ export class MemorySystem implements IMemorySystem {
   // ── Context Retrieval ──
 
   async retrieveForContext(query: string, tokenBudget: number): Promise<string> {
-    return this.retriever.retrieveForContext(query, tokenBudget);
+    let context = await this.retriever.retrieveForContext(query, tokenBudget);
+
+    // Also query procedural workflows
+    try {
+      const procs = await this.procedural.queryProcedural(query, 2);
+      if (procs.length > 0) {
+        const procLines = procs.map((p) => `- Workflow "${p.name}" (Success: ${(p.successRate * 100).toFixed(0)}%): ${p.intentSignature} [${p.executionGraph.length} steps]`);
+        context += `\n\n## Known Procedures\n${procLines.join('\n')}`;
+      }
+    } catch {}
+
+    return context;
+  }
+
+  async runConsolidationCycle(): Promise<ConsolidationReport> {
+    return this.consolidationDaemon.consolidate();
+  }
+
+  async runDreamingCycle(): Promise<DreamingReport> {
+    return this.dreamingEngine.dream();
   }
 
   // ── Fact Ingestion / Extraction ──

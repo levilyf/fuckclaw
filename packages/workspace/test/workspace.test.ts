@@ -46,4 +46,40 @@ describe('WorkspaceManager', () => {
     const configPath = workspace.resolvePath('config', 'fuckclaw.toml');
     expect(configPath).toBe(path.join(tempDir, 'config', 'fuckclaw.toml'));
   });
+
+  it('should create compressed snapshot archive, verify SHA-256 integrity, and rollback (§7.6)', async () => {
+    await workspace.init();
+
+    // 1. Create sample files in workspace
+    const wsDir = workspace.getDirectory('workspace');
+    fs.mkdirSync(path.join(wsDir, 'projects', 'auth-service'), { recursive: true });
+    fs.writeFileSync(path.join(wsDir, 'projects', 'auth-service', 'index.ts'), 'export const auth = "v1.0";', 'utf8');
+    fs.writeFileSync(path.join(wsDir, 'config.json'), '{"active": true}', 'utf8');
+
+    // 2. Create snapshot
+    const snapshotName = 'pre-task-checkpoint-001';
+    const snapshotPath = await workspace.createSnapshot(snapshotName);
+    expect(fs.existsSync(snapshotPath)).toBe(true);
+
+    const snapshots = await workspace.listSnapshots();
+    expect(snapshots).toContain(snapshotName);
+
+    // 3. Verify snapshot integrity
+    const isValid = await workspace.verifySnapshot(snapshotName);
+    expect(isValid).toBe(true);
+
+    // 4. Mutate and delete files in workspace
+    fs.writeFileSync(path.join(wsDir, 'projects', 'auth-service', 'index.ts'), 'export const auth = "CORRUPTED";', 'utf8');
+    fs.unlinkSync(path.join(wsDir, 'config.json'));
+    expect(fs.existsSync(path.join(wsDir, 'config.json'))).toBe(false);
+
+    // 5. Rollback to snapshot
+    const rolledBack = await workspace.rollbackToSnapshot(snapshotName);
+    expect(rolledBack).toBe(true);
+
+    // 6. Verify exact restoration
+    expect(fs.existsSync(path.join(wsDir, 'config.json'))).toBe(true);
+    expect(fs.readFileSync(path.join(wsDir, 'config.json'), 'utf8')).toBe('{"active": true}');
+    expect(fs.readFileSync(path.join(wsDir, 'projects', 'auth-service', 'index.ts'), 'utf8')).toBe('export const auth = "v1.0";');
+  });
 });

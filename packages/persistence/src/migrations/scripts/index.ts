@@ -291,4 +291,110 @@ export const standardMigrations: Migration[] = [
       } catch {}
     },
   },
+
+  // Migration 6: Self-Improvement & Multi-Agent Delegation Schema (§15, §23)
+  {
+    version: 6,
+    name: 'create_self_improvement_and_delegation_schema',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS anti_patterns (
+          id TEXT PRIMARY KEY,
+          context TEXT NOT NULL,
+          mistake TEXT NOT NULL,
+          consequence TEXT NOT NULL,
+          corrective_action TEXT NOT NULL,
+          confidence REAL NOT NULL DEFAULT 1.0,
+          occurrences INTEGER NOT NULL DEFAULT 1,
+          source_task_id TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_anti_patterns_created ON anti_patterns(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_anti_patterns_confidence ON anti_patterns(confidence DESC);
+
+        CREATE TABLE IF NOT EXISTS prompt_mutations (
+          id TEXT PRIMARY KEY,
+          target TEXT NOT NULL,
+          version INTEGER NOT NULL DEFAULT 1,
+          original_prompt TEXT NOT NULL,
+          proposed_prompt TEXT NOT NULL,
+          rationale TEXT NOT NULL,
+          failure_count INTEGER NOT NULL DEFAULT 0,
+          validation_passed INTEGER NOT NULL DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'active',
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_prompt_mutations_target ON prompt_mutations(target, version DESC);
+        CREATE INDEX IF NOT EXISTS idx_prompt_mutations_status ON prompt_mutations(status);
+
+        CREATE TABLE IF NOT EXISTS delegations (
+          id TEXT PRIMARY KEY,
+          parent_task_id TEXT NOT NULL,
+          agent_type TEXT NOT NULL,
+          task TEXT NOT NULL,
+          context_json TEXT NOT NULL DEFAULT '{}',
+          expected_output_json TEXT,
+          budget_json TEXT NOT NULL DEFAULT '{}',
+          timeout_ms INTEGER NOT NULL DEFAULT 60000,
+          state TEXT NOT NULL DEFAULT 'pending',
+          result_json TEXT,
+          created_at INTEGER NOT NULL,
+          completed_at INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_delegations_parent ON delegations(parent_task_id);
+        CREATE INDEX IF NOT EXISTS idx_delegations_agent ON delegations(agent_type);
+        CREATE INDEX IF NOT EXISTS idx_delegations_state ON delegations(state);
+      `);
+
+      try {
+        db.exec(`
+          CREATE VIRTUAL TABLE IF NOT EXISTS anti_patterns_fts USING fts5(
+            id UNINDEXED,
+            context,
+            mistake,
+            consequence,
+            corrective_action,
+            tokenize = 'porter unicode61'
+          );
+        `);
+      } catch {}
+    },
+  },
+
+  // Migration 7: Procedural Memory Schema (§6.4.4, §6.7)
+  {
+    version: 7,
+    name: 'create_procedural_memory_schema',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS procedural_memories (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL UNIQUE,
+          intent_signature TEXT NOT NULL,
+          preconditions_json TEXT NOT NULL DEFAULT '[]',
+          execution_graph_json TEXT NOT NULL DEFAULT '[]',
+          success_rate REAL NOT NULL DEFAULT 1.0,
+          execution_count INTEGER NOT NULL DEFAULT 0,
+          last_executed_at INTEGER NOT NULL,
+          embedding_json TEXT,
+          created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_procedural_intent ON procedural_memories(intent_signature);
+        CREATE INDEX IF NOT EXISTS idx_procedural_name ON procedural_memories(name);
+      `);
+
+      try {
+        db.exec(`
+          CREATE VIRTUAL TABLE IF NOT EXISTS procedural_fts USING fts5(
+            id UNINDEXED,
+            name,
+            intent_signature,
+            tokenize = 'porter unicode61'
+          );
+        `);
+      } catch {}
+    },
+  },
 ];

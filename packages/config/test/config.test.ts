@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ConfigManager } from '../src/index.js';
+import { ConfigManager, Keystore, loadConfigFile, loadProfile } from '../src/index.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -93,5 +93,74 @@ apiKey = "sk-test-secret-key-12345"
     expect(config.system.logLevel).toBe('debug');
     expect(config.llm?.baseUrl).toBe('https://api.test.com/v1');
     expect(config.llm?.apiKey).toBe('secret-key-abc');
+  });
+
+  it('should encrypt and decrypt secrets via AES-256-GCM Keystore (§19.6)', async () => {
+    const tmpDir = path.join(os.tmpdir(), `fuckclaw-keystore-test-${Date.now()}`);
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const keystorePath = path.join(tmpDir, 'env.json.enc');
+    const passphrase = 'test-secure-passphrase-999';
+
+    const keystore = new Keystore(keystorePath, passphrase);
+    await keystore.setSecret('ANTHROPIC_API_KEY', 'sk-ant-test-123456789');
+    await keystore.setSecret('GITHUB_TOKEN', 'ghp_secretTokenVal');
+
+    // Retrieve from same instance
+    expect(await keystore.getSecret('ANTHROPIC_API_KEY')).toBe('sk-ant-test-123456789');
+    expect(await keystore.getSecret('GITHUB_TOKEN')).toBe('ghp_secretTokenVal');
+    expect(await keystore.getSecret('NON_EXISTENT')).toBeNull();
+
+    // Verify persisted encrypted file exists on disk
+    expect(fs.existsSync(keystorePath)).toBe(true);
+    const rawFileContent = fs.readFileSync(keystorePath, 'utf8');
+    expect(rawFileContent).not.toContain('sk-ant-test-123456789'); // Ensure no plaintext on disk
+    const parsedPayload = JSON.parse(rawFileContent);
+    expect(parsedPayload.tag).toBeDefined();
+    expect(parsedPayload.ciphertext).toBeDefined();
+
+    // Instantiate fresh Keystore with same passphrase and verify decryption
+    const freshKeystore = new Keystore(keystorePath, passphrase);
+    expect(await freshKeystore.getSecret('ANTHROPIC_API_KEY')).toBe('sk-ant-test-123456789');
+    expect(await freshKeystore.listKeys()).toEqual(['ANTHROPIC_API_KEY', 'GITHUB_TOKEN']);
+
+    // Instantiate with wrong passphrase -> should reject with auth failure
+    const wrongKeystore = new Keystore(keystorePath, 'wrong-password');
+    await expect(wrongKeystore.getSecret('ANTHROPIC_API_KEY')).rejects.toThrow(/Failed to decrypt/);
+
+    // Delete secret
+    expect(await freshKeystore.deleteSecret('GITHUB_TOKEN')).toBe(true);
+    expect(await freshKeystore.getSecret('GITHUB_TOKEN')).toBeNull();
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('should load named profiles and respect layer precedence (§19.2, §19.4)', async () => {
+    const tmpDir = path.join(os.tmpdir(), `fuckclaw-profile-test-${Date.now()}`);
+    const profilesDir = path.join(tmpDir, 'profiles');
+    fs.mkdirSync(profilesDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(profilesDir, 'work.toml'),
+      `
+[system]
+logLevel = "warn"
+maxConcurrentTasks = 16
+
+[budget]
+dailyLimitUsd = 100.0
+`,
+      'utf8'
+    );
+
+    const configManager = new ConfigManager({
+      profilesDir,
+      profile: 'work',
+    });
+
+    expect(configManager.get('system.logLevel')).toBe('warn');
+    expect(configManager.get('system.maxConcurrentTasks')).toBe(16);
+    expect(configManager.get('budget.dailyLimitUsd')).toBe(100.0);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });

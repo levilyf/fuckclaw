@@ -96,6 +96,7 @@ export interface RetrievalWeights {
 
 export interface IMemorySystem {
   readonly working: any;
+  readonly procedural: any;
   recordEpisode(input: EpisodicRecordInput): Promise<string>;
   getEpisode(id: string): Promise<EpisodicMemoryRecord | null>;
   queryEpisodic(query: MemoryQuery): Promise<ScoredMemoryRecord<EpisodicMemoryRecord>[]>;
@@ -106,4 +107,6 @@ export interface IMemorySystem {
   retrieveForContext(query: string, tokenBudget: number): Promise<string>;
   flushWorkingToEpisodic(taskId?: string): Promise<string[]>;
   extractAndAssertUserFacts(text: string, sourceEpisodeId?: string): Promise<string[]>;
+  runConsolidationCycle(): Promise<any>;
+  runDreamingCycle(): Promise<any>;
 }

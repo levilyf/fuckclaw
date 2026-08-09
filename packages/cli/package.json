@@ -22,6 +22,7 @@
     "@fuckclaw/llm-router": "workspace:*",
     "@fuckclaw/mcp": "workspace:*",
     "@fuckclaw/memory": "workspace:*",
+    "@fuckclaw/multi-agent": "workspace:*",
     "@fuckclaw/network": "workspace:*",
     "@fuckclaw/observability": "workspace:*",
     "@fuckclaw/persistence": "workspace:*",
@@ -29,6 +30,7 @@
     "@fuckclaw/plugins": "workspace:*",
     "@fuckclaw/reasoning": "workspace:*",
     "@fuckclaw/scheduler": "workspace:*",
+    "@fuckclaw/self-improvement": "workspace:*",
     "@fuckclaw/skills": "workspace:*",
     "@fuckclaw/tool-runtime": "workspace:*",
     "@fuckclaw/workspace": "workspace:*"

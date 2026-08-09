@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Logger } from '../src/index.js';
+import { Logger, TraceReplayEngine, RecordedTrace } from '../src/index.js';
 import { ConfigManager } from '@fuckclaw/config';
 
 describe('Observability RFC 18 Compliance', () => {
@@ -83,5 +83,38 @@ describe('Observability RFC 18 Compliance', () => {
     expect(snapshot.tasks.active).toBe(3);
     expect(snapshot.llm.totalPromptTokens).toBe(1200);
     expect(snapshot.llm.avgLatencyMs).toBe(150);
+  });
+
+  it('should deterministically replay reasoning traces and detect divergences (§18.5)', async () => {
+    const trace: RecordedTrace = {
+      taskId: 'task-replay-001',
+      goal: 'Compile TypeScript project',
+      startedAt: Date.now() - 5000,
+      completedAt: Date.now(),
+      success: true,
+      steps: [
+        { step: 1, action: 'shell("tsc")', observation: '0 errors', success: true, timestamp: Date.now() - 4000 },
+        { step: 2, action: 'finish', observation: 'Compilation verified', success: true, timestamp: Date.now() - 2000 },
+      ],
+    };
+
+    const replayer = new TraceReplayEngine(trace, async (step) => {
+      // Deterministic mock execution matching recorded trace
+      if (step.step === 1) {
+        return { action: 'shell("tsc")', observation: '0 errors', success: true };
+      }
+      return { action: 'finish', observation: 'Compilation verified', success: true };
+    });
+
+    // Step-by-step
+    const evt1 = replayer.step();
+    expect(evt1).not.toBeNull();
+    expect(evt1!.step.action).toBe('shell("tsc")');
+
+    // Replay all
+    const report = await replayer.replayAll();
+    expect(report.deterministicMatch).toBe(true);
+    expect(report.divergences.length).toBe(0);
+    expect(report.stepsReplayed).toBe(2);
   });
 });

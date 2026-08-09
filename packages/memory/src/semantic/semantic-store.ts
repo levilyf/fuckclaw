@@ -105,6 +105,10 @@ export class SemanticStore {
     return rows.map((r) => this.rowToRecord(r));
   }
 
+  async getAllActive(limit: number = 100): Promise<SemanticMemoryRecord[]> {
+    return this.getActiveFacts(limit);
+  }
+
   async queryBySubject(subject: string): Promise<SemanticMemoryRecord[]> {
     const rows = this.db.query<SemanticRow>(
       `SELECT * FROM semantic_memories WHERE subject = ? AND valid_until IS NULL ORDER BY confidence DESC`,

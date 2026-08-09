@@ -3,9 +3,12 @@ import { IEventBus } from '@fuckclaw/event-bus';
 import { IToolRuntime } from '@fuckclaw/tool-runtime';
 import { LLMRouter, ChatMessage } from '@fuckclaw/llm-router';
 import { Task, ContextBundle, StepResult } from '@fuckclaw/kernel';
+import { IReasoningStrategy, ReasoningStrategyType } from '../types.js';
 import { ToolCallParser } from '../parsers/tool-call-parser.js';
 
-export class ReActLoop {
+export class ReActLoop implements IReasoningStrategy {
+  readonly name: ReasoningStrategyType = 'react';
+
   constructor(
     private logger: IObservability,
     private eventBus: IEventBus,
